@@ -1,0 +1,64 @@
+{
+  "name": "ytstats",
+  "version": "0.1.0",
+  "description": "Pull your YouTube channel stats and analytics as JSON. Bring your own Google Cloud credentials, no server, no data leaves your machine.",
+  "type": "module",
+  "bin": {
+    "ytstats": "./bin/ytstats.js"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "youtube",
+    "analytics",
+    "youtube-api",
+    "youtube-analytics",
+    "cli",
+    "json",
+    "statistics",
+    "creator",
+    "agent",
+    "agentic"
+  ],
+  "author": "Nicolas Dao",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicolasdao/ytstats.git"
+  },
+  "homepage": "https://github.com/nicolasdao/ytstats#readme",
+  "bugs": {
+    "url": "https://github.com/nicolasdao/ytstats/issues"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "googleapis": "^171.4.0",
+    "open": "^9.1.0"
+  },
+  "overridesRationale": {
+    "gaxios": "googleapis-common pins gaxios 7.1.3, which drags in rimraf > glob > minimatch > brace-expansion and a high-severity DoS advisory (GHSA-mh99-v99m-4gvg). gaxios 7.1.4+ dropped that chain. Same major version, so this is a patch-level floor, not a compatibility risk. Remove once googleapis-common raises its own floor."
+  },
+  "overrides": {
+    "gaxios": "^7.1.4"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# Never commit OAuth material. ytstats stores credentials in a per-user config
+# directory, but a client_secret download could easily land here during testing.
+client_secret*.json
+credentials.json
+tokens.json
+.env

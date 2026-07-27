@@ -1,0 +1,165 @@
+import { describe, it, expect } from 'vitest';
+import crypto from 'node:crypto';
+import { createPkcePair, buildAuthUrl, startLoopbackServer, SCOPES } from '../../src/auth/oauth.js';
+import { ERROR_CODES } from '../../src/errors.js';
+
+const base64url = buf => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+describe('PKCE', () => {
+  it('produces a verifier within the RFC 7636 length bounds', () => {
+    const { verifier } = createPkcePair();
+    expect(verifier.length).toBeGreaterThanOrEqual(43);
+    expect(verifier.length).toBeLessThanOrEqual(128);
+  });
+
+  it('uses only unreserved base64url characters', () => {
+    const { verifier, challenge } = createPkcePair();
+    expect(verifier).toMatch(/^[A-Za-z0-9\-._~]+$/);
+    expect(challenge).toMatch(/^[A-Za-z0-9\-_]+$/);
+  });
+
+  it('derives the challenge as base64url(SHA256(verifier))', () => {
+    const { verifier, challenge } = createPkcePair();
+    expect(challenge).toBe(base64url(crypto.createHash('sha256').update(verifier).digest()));
+  });
+
+  it('is unpredictable across calls', () => {
+    const seen = new Set(Array.from({ length: 50 }, () => createPkcePair().verifier));
+    expect(seen.size).toBe(50);
+  });
+});
+
+describe('buildAuthUrl', () => {
+  const params = () => {
+    const url = new URL(buildAuthUrl({
+      clientId: 'cid.apps.googleusercontent.com',
+      redirectUri: 'http://127.0.0.1:12345',
+      state: 'st-123',
+      codeChallenge: 'chal-abc',
+    }));
+    return url;
+  };
+
+  it('points at Google\'s authorization endpoint', () => {
+    expect(params().origin + params().pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+  });
+
+  it('requests an authorization code with PKCE S256', () => {
+    const p = params().searchParams;
+    expect(p.get('response_type')).toBe('code');
+    expect(p.get('code_challenge')).toBe('chal-abc');
+    expect(p.get('code_challenge_method')).toBe('S256');
+  });
+
+  it('carries the CSRF state and redirect URI', () => {
+    const p = params().searchParams;
+    expect(p.get('state')).toBe('st-123');
+    expect(p.get('redirect_uri')).toBe('http://127.0.0.1:12345');
+  });
+
+  it('asks for offline access so a refresh token is issued', () => {
+    const p = params().searchParams;
+    expect(p.get('access_type')).toBe('offline');
+    expect(p.get('prompt')).toBe('consent');
+  });
+
+  it('requests exactly the three read-only YouTube scopes', () => {
+    const scope = params().searchParams.get('scope');
+    expect(scope.split(' ').sort()).toEqual([...SCOPES].sort());
+    expect(scope).not.toMatch(/force-ssl|upload|partner/);
+  });
+});
+
+describe('loopback callback server', () => {
+  async function get(port, pathAndQuery) {
+    const res = await fetch(`http://127.0.0.1:${port}${pathAndQuery}`);
+    return { status: res.status, body: await res.text() };
+  }
+
+  it('binds to loopback only, never 0.0.0.0', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    expect(server.address).toBe('127.0.0.1');
+    expect(server.redirectUri).toBe(`http://127.0.0.1:${server.port}`);
+    server.close();
+  });
+
+  it('resolves with the authorization code when state matches', async () => {
+    const server = await startLoopbackServer({ state: 'good-state' });
+    const [result, page] = await Promise.all([
+      server.waitForCode(),
+      get(server.port, '/?code=auth-code-xyz&state=good-state'),
+    ]);
+    expect(result.code).toBe('auth-code-xyz');
+    expect(page.status).toBe(200);
+    expect(page.body).toMatch(/you can close this (tab|window)/i);
+    server.close();
+  });
+
+  it('accepts the callback on /callback as well as /', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    const [result] = await Promise.all([
+      server.waitForCode(),
+      get(server.port, '/callback?code=c1&state=s'),
+    ]);
+    expect(result.code).toBe('c1');
+    server.close();
+  });
+
+  it('rejects a mismatched state (CSRF defence) and says so on the page', async () => {
+    const server = await startLoopbackServer({ state: 'expected' });
+    const [err, page] = await Promise.all([
+      server.waitForCode().catch(e => e),
+      get(server.port, '/?code=c&state=attacker'),
+    ]);
+    expect(err.code).toBe('AUTH_STATE_MISMATCH');
+    expect(err.message).toMatch(/security check|state/i);
+    expect(page.status).toBe(400);
+    server.close();
+  });
+
+  it('maps a user denial to ACCESS_DENIED', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    const [err] = await Promise.all([
+      server.waitForCode().catch(e => e),
+      get(server.port, '/?error=access_denied&state=s'),
+    ]);
+    expect(err.code).toBe('AUTH_CONSENT_DECLINED');
+    server.close();
+  });
+
+  it('ignores favicon requests instead of treating them as the callback', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    const favicon = await get(server.port, '/favicon.ico');
+    expect(favicon.status).toBe(404);
+
+    const [result] = await Promise.all([
+      server.waitForCode(),
+      get(server.port, '/?code=real&state=s'),
+    ]);
+    expect(result.code).toBe('real');
+    server.close();
+  });
+
+  it('times out with AUTH_TIMEOUT when the user never completes the flow', async () => {
+    const server = await startLoopbackServer({ state: 's', timeoutMs: 120 });
+    const err = await server.waitForCode().catch(e => e);
+    expect(err.code).toBe('AUTH_TIMEOUT');
+    server.close();
+  });
+
+  it('never echoes the authorization code back into the browser page', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    const [, page] = await Promise.all([
+      server.waitForCode(),
+      get(server.port, '/?code=super-secret-code&state=s'),
+    ]);
+    expect(page.body).not.toMatch(/super-secret-code/);
+    server.close();
+  });
+
+  it('close() is idempotent', async () => {
+    const server = await startLoopbackServer({ state: 's' });
+    server.close();
+    expect(() => server.close()).not.toThrow();
+  });
+});

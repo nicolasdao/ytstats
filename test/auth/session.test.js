@@ -1,0 +1,239 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { useTempConfigDir } from '../helpers/tmp.js';
+import { getAuthenticatedClient, login, logout } from '../../src/auth/session.js';
+import { saveCredentials } from '../../src/auth/credentials.js';
+import { saveAccount, loadAccount, listAccounts } from '../../src/auth/tokens.js';
+import { ERROR_CODES } from '../../src/errors.js';
+
+const TOKENS = { access_token: 'ya29.aaa', refresh_token: '1//refresh-a', expiry_date: 999 };
+
+/** Stand-in for google.auth.OAuth2 — same surface, no network. */
+class FakeOAuth2 extends EventEmitter {
+  constructor(clientId, clientSecret, redirectUri) {
+    super();
+    this.clientId = clientId;
+    this.clientSecret = clientSecret;
+    this.redirectUri = redirectUri;
+    this.credentials = {};
+    this.revoked = [];
+  }
+  setCredentials(c) { this.credentials = c; }
+  async getToken() { return { tokens: TOKENS }; }
+  async revokeToken(t) { this.revoked.push(t); }
+}
+
+function deps(overrides = {}) {
+  return {
+    OAuth2: FakeOAuth2,
+    fetchIdentity: vi.fn(async () => ({
+      channelId: 'UC-abc',
+      channelTitle: 'Nic Dao',
+      customUrl: '@nicolasdao',
+    })),
+    startLoopbackServer: vi.fn(async () => ({
+      port: 51000,
+      address: '127.0.0.1',
+      redirectUri: 'http://127.0.0.1:51000',
+      waitForCode: async () => ({ code: 'auth-code' }),
+      close: vi.fn(),
+    })),
+    openBrowser: vi.fn(async () => {}),
+    log: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('getAuthenticatedClient', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  it('throws AUTH_NO_TOKENS when credentials exist but nobody has logged in', () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    const err = (() => { try { getAuthenticatedClient({ deps: deps() }); } catch (e) { return e; } })();
+    expect(err.code).toBe('AUTH_NO_TOKENS');
+    expect(err.diagnostic.remediation.commands[0].run).toMatch(/ytstats login/);
+  });
+
+  it('reports the missing OAuth client first when nothing at all is configured', () => {
+    // Reporting "not signed in" to someone who has not created a Google Cloud
+    // project would send them to `login`, which cannot possibly succeed yet.
+    const err = (() => {
+      try { getAuthenticatedClient({ deps: deps(), env: {}, cwd: tmp.dir }); } catch (e) { return e; }
+    })();
+    expect(err.code).toBe('AUTH_NO_CREDENTIALS');
+    expect(err.diagnostic.remediation.steps.join(' ')).toMatch(/console\.cloud\.google\.com/);
+  });
+
+  it('throws MISSING_CREDENTIALS when tokens exist but the client secret is gone', () => {
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+    const err = (() => {
+      try { getAuthenticatedClient({ deps: deps(), env: {}, cwd: tmp.dir }); } catch (e) { return e; }
+    })();
+    expect(err.code).toBe('AUTH_NO_CREDENTIALS');
+  });
+
+  it('returns a client primed with the stored tokens', () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+    const { client, account } = getAuthenticatedClient({ deps: deps() });
+    expect(client.credentials).toEqual(TOKENS);
+    expect(client.clientId).toBe('cid');
+    expect(account.channelId).toBe('UC-abc');
+  });
+
+  it('persists rotated tokens when the client refreshes them', () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+    const { client } = getAuthenticatedClient({ deps: deps() });
+
+    client.emit('tokens', { access_token: 'ya29.rotated', expiry_date: 4242 });
+
+    const stored = loadAccount('UC-abc').tokens;
+    expect(stored.access_token).toBe('ya29.rotated');
+    expect(stored.expiry_date).toBe(4242);
+    // Google omits refresh_token on refresh; the original must survive.
+    expect(stored.refresh_token).toBe('1//refresh-a');
+  });
+
+  it('selects a named account', () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-1', channelTitle: 'One', tokens: TOKENS });
+    saveAccount({ channelId: 'UC-2', channelTitle: 'Two', tokens: TOKENS });
+    const { account } = getAuthenticatedClient({ account: 'UC-2', deps: deps() });
+    expect(account.channelId).toBe('UC-2');
+  });
+
+  it('fails loudly for an unknown --account instead of using the default', () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-1', channelTitle: 'One', tokens: TOKENS });
+    const err = (() => {
+      try { getAuthenticatedClient({ account: 'UC-ghost', deps: deps() }); } catch (e) { return e; }
+    })();
+    expect(err.code).toBe('AUTH_ACCOUNT_UNKNOWN');
+    expect(err.message).toMatch(/UC-ghost/);
+  });
+});
+
+describe('login', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  it('runs the loopback flow and stores tokens plus credentials', async () => {
+    const d = deps();
+    const result = await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec', source: 'file.json' },
+      deps: d,
+    });
+
+    expect(result.channelId).toBe('UC-abc');
+    expect(result.channelTitle).toBe('Nic Dao');
+    expect(loadAccount('UC-abc').tokens.refresh_token).toBe('1//refresh-a');
+    expect(listAccounts()).toHaveLength(1);
+    expect(d.openBrowser).toHaveBeenCalledOnce();
+  });
+
+  it('opens the browser at Google, not at the loopback server', async () => {
+    const d = deps();
+    await login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' }, deps: d });
+    const url = d.openBrowser.mock.calls[0][0];
+    expect(url).toMatch(/^https:\/\/accounts\.google\.com/);
+    expect(url).toMatch(/code_challenge_method=S256/);
+  });
+
+  it('sends the PKCE verifier when redeeming the code', async () => {
+    let seen;
+    class Spy extends FakeOAuth2 {
+      async getToken(opts) { seen = opts; return { tokens: TOKENS }; }
+    }
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      deps: deps({ OAuth2: Spy }),
+    });
+    expect(seen.code).toBe('auth-code');
+    expect(seen.codeVerifier).toMatch(/^[A-Za-z0-9\-._~]{43,128}$/);
+    expect(seen.redirect_uri).toBe('http://127.0.0.1:51000');
+  });
+
+  it('always shuts the loopback server down, even when the flow fails', async () => {
+    const close = vi.fn();
+    const d = deps({
+      startLoopbackServer: vi.fn(async () => ({
+        port: 1, address: '127.0.0.1', redirectUri: 'http://127.0.0.1:1',
+        waitForCode: async () => { throw new Error('user bailed'); },
+        close,
+      })),
+    });
+    await expect(login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 's' }, deps: d })).rejects.toThrow();
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('does not persist anything when identity lookup fails', async () => {
+    const d = deps({ fetchIdentity: vi.fn(async () => { throw new Error('boom'); }) });
+    await expect(login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 's' }, deps: d })).rejects.toThrow();
+    expect(listAccounts()).toEqual([]);
+  });
+
+  it('reports NO_YOUTUBE_CHANNEL when the account owns no channel', async () => {
+    const d = deps({ fetchIdentity: vi.fn(async () => null) });
+    const err = await login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 's' }, deps: d }).catch(e => e);
+    expect(err.code).toBe('AUTH_NO_CHANNEL');
+  });
+
+  it('skips the browser in --no-browser mode and uses the pasted URL', async () => {
+    const d = deps({
+      promptForRedirectUrl: vi.fn(async () => 'http://127.0.0.1:51000/?code=pasted-code&state=IGNORED'),
+    });
+    const result = await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 's' },
+      noBrowser: true,
+      deps: d,
+    });
+    expect(result.channelId).toBe('UC-abc');
+    expect(d.openBrowser).not.toHaveBeenCalled();
+    expect(d.startLoopbackServer).not.toHaveBeenCalled();
+  });
+});
+
+describe('logout', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  it('revokes the token with Google and forgets the account', async () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+
+    const result = await logout({ deps: deps() });
+    expect(result.revoked).toBe(true);
+    expect(loadAccount('UC-abc')).toBeNull();
+  });
+
+  it('still forgets the account when revocation fails offline', async () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+
+    class Offline extends FakeOAuth2 {
+      async revokeToken() { throw new Error('ENOTFOUND'); }
+    }
+    const result = await logout({ deps: deps({ OAuth2: Offline }) });
+    expect(result.revoked).toBe(false);
+    expect(loadAccount('UC-abc')).toBeNull();
+  });
+
+  it('is a no-op when nobody is logged in', async () => {
+    const result = await logout({ deps: deps() });
+    expect(result.loggedOut).toBe(false);
+  });
+
+  it('--all clears every account and the stored client secret', async () => {
+    saveCredentials({ clientId: 'cid', clientSecret: 'sec' });
+    saveAccount({ channelId: 'UC-1', channelTitle: 'One', tokens: TOKENS });
+    saveAccount({ channelId: 'UC-2', channelTitle: 'Two', tokens: TOKENS });
+
+    await logout({ all: true, forgetCredentials: true, deps: deps() });
+    expect(listAccounts()).toEqual([]);
+  });
+});
