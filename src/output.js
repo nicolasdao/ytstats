@@ -166,7 +166,3 @@ export function createReporter({
 
   return reporter;
 }
-
-/** Back-compat shims for callers that predate the diagnostics envelope. */
-export const renderSuccess = (command, data, opts) => renderEnvelope({ command, data, ...opts });
-export const renderError = (command, err, opts) => renderEnvelope({ command, errors: [err], ...opts });

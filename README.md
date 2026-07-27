@@ -245,6 +245,12 @@ const result = await fetchAll(createApis(client), { range: resolveDateRange({ da
 
 The Data API allows 10,000 units/day per project. `ytstats` uses the uploads playlist (1 unit per 50 videos) rather than `search.list` (100 units per call), so a full fetch for a 100-video channel costs about 5 units. The Analytics and Reporting APIs have separate quotas.
 
+## Documentation
+
+- [docs/api-gotchas.md](docs/api-gotchas.md) — non-obvious YouTube API behaviour, what breaks and where it is handled
+- [docs/architecture.md](docs/architecture.md) — module layout, design principles, testing strategy, how to add a dataset
+- [CHANGELOG.md](CHANGELOG.md)
+
 ## Requirements
 
 Node.js 18+. No native dependencies, so `npx` is instant.
