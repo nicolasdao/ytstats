@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-28
+
 ### Fixed
 
 - Report an expired legacy refresh token during `import-legacy` as
@@ -31,8 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `identifyLegacyTokens` is exported from `src/index.js`, exchanging a legacy
-  token file's tokens for the channel identity that owns them.
+- Export `identifyLegacyTokens` from `src/index.js`, exchanging a legacy token
+  file's tokens for the channel identity that owns them.
 
 ## [0.2.0] - 2026-07-28
 
@@ -87,6 +89,7 @@ Initial release.
 - Client ID pre-flight validation, so a malformed OAuth client fails immediately
   instead of hanging until the browser callback times out.
 
-[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/nicolasdao/ytstats/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nicolasdao/ytstats/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nicolasdao/ytstats/releases/tag/v0.1.0
