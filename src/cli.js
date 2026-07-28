@@ -7,7 +7,7 @@ import { createReporter } from './output.js';
 import { EXIT_CODES, YtStatsError, ERROR_CODES, SETUP_GUIDE, fail } from './errors.js';
 import { diagnose, DIAGNOSTICS, EXIT } from './diagnostics.js';
 import { resolveDateRange } from './dates.js';
-import { getAuthenticatedClient, login, logout } from './auth/session.js';
+import { getAuthenticatedClient, login, logout, identifyLegacyTokens } from './auth/session.js';
 import { resolveCredentials, saveCredentials, validateClientId } from './auth/credentials.js';
 import { listAccounts, setDefaultAccount, migrateLegacyTokens } from './auth/tokens.js';
 import { configDir, writeJson, removeFile } from './config/store.js';
@@ -31,7 +31,7 @@ export function buildProgram(deps = {}) {
     stdout = s => process.stdout.write(s + '\n'),
     stderr = s => process.stderr.write(s + '\n'),
     exit = code => { process.exitCode = code; },
-    session = { getAuthenticatedClient, login, logout },
+    session = { getAuthenticatedClient, login, logout, identifyLegacyTokens },
     now = () => new Date(),
   } = deps;
 
@@ -306,17 +306,20 @@ export function buildProgram(deps = {}) {
 
       // The legacy file holds no channel identity, so exchange the tokens for it
       // before storing anything.
-      const legacy = JSON.parse(fs.readFileSync(tokensFile, 'utf-8'));
-      const client = new (await import('googleapis')).google.auth.OAuth2(
-        credentials.clientId, credentials.clientSecret, 'http://127.0.0.1',
-      );
-      client.setCredentials(legacy);
+      let legacy;
+      try {
+        legacy = JSON.parse(fs.readFileSync(tokensFile, 'utf-8'));
+      } catch {
+        // A mistyped path is as ordinary as an expired token during a migration;
+        // neither is an internal error.
+        throw fail(DIAGNOSTICS.INPUT_INVALID_VALUE, {
+          value: tokensFile,
+          expected: 'a readable JSON token file containing a refresh_token',
+        });
+      }
 
-      const { google } = await import('googleapis');
-      const res = await google.youtube({ version: 'v3', auth: client })
-        .channels.list({ part: 'snippet', mine: true });
-      const channel = res.data.items?.[0];
-      if (!channel) {
+      const identity = await session.identifyLegacyTokens({ credentials, tokens: legacy });
+      if (!identity?.channelId) {
         throw new YtStatsError('Those tokens do not resolve to a YouTube channel.', {
           code: ERROR_CODES.NO_YOUTUBE_CHANNEL,
         });
@@ -324,15 +327,15 @@ export function buildProgram(deps = {}) {
 
       saveCredentials(credentials);
       const result = migrateLegacyTokens(tokensFile, {
-        channelId: channel.id,
-        channelTitle: channel.snippet?.title,
-        customUrl: channel.snippet?.customUrl,
+        channelId: identity.channelId,
+        channelTitle: identity.channelTitle,
+        customUrl: identity.customUrl,
       });
 
       reporter.progress(result.migrated
-        ? `Imported tokens for ${channel.snippet?.title ?? channel.id}.`
+        ? `Imported tokens for ${identity.channelTitle ?? identity.channelId}.`
         : `Nothing imported (${result.reason}).`);
-      return { ...result, channelId: channel.id, channelTitle: channel.snippet?.title ?? null };
+      return { ...result, channelId: identity.channelId, channelTitle: identity.channelTitle ?? null };
     }));
 
   program

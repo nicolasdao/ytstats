@@ -137,7 +137,17 @@ The lifecycle:
 4. **Download and merge.** Each report's `downloadUrl` is fetched through `apis.downloadCsv`, parsed, and folded into a `Map` keyed `` `${date}|${videoId}` ``. Reports overlap, so last write wins — later reports carry corrected figures for the same day.
 5. **Sort** by date, then video id.
 
-Rows are `{ date, channelId, videoId, impressions, impressionsCtr }`. **`impressionsCtr` is a decimal fraction, not a percentage**: `0.0561` means 5.61%.
+The CSV headers are **not** what the output field names suggest:
+
+```
+date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr
+```
+
+`fetchReach` reads `video_thumbnail_impressions` and `video_thumbnail_impressions_ctr`, falling back to the short `impressions` / `impressions_ctr` names should the schema ever change. Reading only the short names yields `null` for every row while the command still reports success — see [the gotcha](gotchas/youtube-api.md#the-reach-csv-columns-are-not-called-impressions).
+
+A failed download is thrown with its HTTP status preserved as structure and wrapped in `call()`, so a Google 5xx classifies as `API_UNAVAILABLE` (retryable) rather than `UNEXPECTED`.
+
+Rows are `{ date, channelId, videoId, impressions, impressionsCtr }`, with numbers coerced by `parseCsv`. **`impressionsCtr` is a decimal fraction, not a percentage**: `0.0561` means 5.61%.
 
 Report data is permanently 1-2 days behind — the same lag YouTube Studio shows — because it covers midnight-to-midnight Pacific periods generated after the period closes.
 

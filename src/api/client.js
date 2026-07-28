@@ -23,7 +23,19 @@ export function createApis(authClient) {
         },
       });
       if (!res.ok) {
-        throw new Error(`Failed to download report (${res.status} ${res.statusText})`);
+        // Preserve the HTTP status as structure, not just prose. diagnoseGoogleError
+        // reads err.response.status ?? err.status; folding the code into the message
+        // alone loses it, and a transient 5xx then classifies as UNEXPECTED
+        // (recoverable: false) instead of API_UNAVAILABLE (retryable: true) —
+        // stopping a caller permanently on a hiccup it should have retried.
+        const body = await res.text().catch(() => '');
+        let data;
+        try { data = JSON.parse(body); } catch { data = body || undefined; }
+
+        const err = new Error(`Failed to download report (${res.status} ${res.statusText})`);
+        err.status = res.status;
+        err.response = { status: res.status, data };
+        throw err;
       }
       return res.text();
     },

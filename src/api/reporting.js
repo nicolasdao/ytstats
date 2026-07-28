@@ -72,7 +72,10 @@ export async function fetchReach(apis, { onProgress } = {}) {
   const deduped = new Map();
   for (const [i, report] of reports.entries()) {
     onProgress?.(`Downloading reach report ${i + 1}/${reports.length}...`);
-    const csv = await apis.downloadCsv(report.downloadUrl);
+    // Wrapped like every other request in this file. Without call(), a Google
+    // 5xx on the download escapes classification entirely and lands as
+    // UNEXPECTED / recoverable:false — halting a caller on a transient failure.
+    const csv = await call(() => apis.downloadCsv(report.downloadUrl));
     for (const row of parseCsv(csv)) {
       const date = normalizeReportingDate(row.date);
       const videoId = row.video_id ?? null;
@@ -80,9 +83,15 @@ export async function fetchReach(apis, { onProgress } = {}) {
         date,
         channelId: row.channel_id ?? null,
         videoId,
-        impressions: row.impressions ?? null,
+        // The channel_reach_basic_a1 CSV names these columns
+        // video_thumbnail_impressions / video_thumbnail_impressions_ctr. Reading
+        // `impressions` / `impressions_ctr` yields undefined for every row, which
+        // ?? null turns into a successful-looking response full of nulls — the
+        // worst failure shape, since ok stays true and no warning fires. The
+        // shorter names are accepted too in case the schema ever changes.
+        impressions: row.video_thumbnail_impressions ?? row.impressions ?? null,
         // Decimal fraction, not a percentage: 0.0561 means 5.61%.
-        impressionsCtr: row.impressions_ctr ?? null,
+        impressionsCtr: row.video_thumbnail_impressions_ctr ?? row.impressions_ctr ?? null,
       });
     }
   }

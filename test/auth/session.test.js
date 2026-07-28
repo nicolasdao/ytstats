@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { useTempConfigDir } from '../helpers/tmp.js';
-import { getAuthenticatedClient, login, logout } from '../../src/auth/session.js';
+import { getAuthenticatedClient, login, logout, identifyLegacyTokens } from '../../src/auth/session.js';
 import { saveCredentials } from '../../src/auth/credentials.js';
 import { saveAccount, loadAccount, listAccounts } from '../../src/auth/tokens.js';
 import { ERROR_CODES } from '../../src/errors.js';
@@ -281,5 +281,57 @@ describe('logout', () => {
 
     await logout({ all: true, forgetCredentials: true, deps: deps() });
     expect(listAccounts()).toEqual([]);
+  });
+});
+
+describe('identifyLegacyTokens', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  const CREDS = { clientId: 'cid', clientSecret: 'sec' };
+
+  it('returns the channel identity the legacy tokens belong to', async () => {
+    const identity = await identifyLegacyTokens({
+      credentials: CREDS, tokens: TOKENS, deps: deps(),
+    });
+    expect(identity.channelId).toBe('UC-abc');
+  });
+
+  it('maps an expired legacy refresh token to AUTH_TOKEN_EXPIRED, not UNEXPECTED', async () => {
+    // The whole point of a migration is that the old setup went stale, so this is
+    // the *expected* failure. Reporting UNEXPECTED tells the user to file a bug
+    // against a tool that is working correctly — and its recoverable:false stops
+    // an agent dead instead of sending it to `ytstats login`.
+    const err = await identifyLegacyTokens({
+      credentials: CREDS,
+      tokens: TOKENS,
+      deps: deps({ fetchIdentity: async () => { throw new Error('invalid_grant'); } }),
+    }).catch(e => e);
+
+    // The envelope surfaces the DIAGNOSTICS vocabulary; err.code carries the
+    // coarser internal ERROR_CODES value. Assert on what the caller actually sees.
+    expect(err.diagnostic.code).toBe('AUTH_TOKEN_EXPIRED');
+    expect(err.diagnostic.recoverable).toBe(true);
+    expect(err.diagnostic.remediation.commands.some(c => /ytstats login/.test(c.run))).toBe(true);
+  });
+
+  it('maps a revoked legacy token to AUTH_TOKEN_REVOKED', async () => {
+    const err = await identifyLegacyTokens({
+      credentials: CREDS,
+      tokens: TOKENS,
+      deps: deps({ fetchIdentity: async () => { throw new Error('invalid_grant: token revoked'); } }),
+    }).catch(e => e);
+    expect(err.diagnostic.code).toBe('AUTH_TOKEN_REVOKED');
+  });
+
+  it('never reports a Google failure as UNEXPECTED', async () => {
+    const err = await identifyLegacyTokens({
+      credentials: CREDS,
+      tokens: TOKENS,
+      deps: deps({ fetchIdentity: async () => { throw new Error('quotaExceeded'); } }),
+    }).catch(e => e);
+    expect(err.diagnostic.code).not.toBe('UNEXPECTED');
+    expect(err.diagnostic.code).toBe('API_QUOTA_EXCEEDED');
   });
 });

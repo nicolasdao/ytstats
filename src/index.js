@@ -9,7 +9,7 @@
  *   const { client } = getAuthenticatedClient();
  *   const result = await fetchAll(createApis(client), { range: resolveDateRange({ days: 90 }) });
  */
-export { getAuthenticatedClient, login, logout } from './auth/session.js';
+export { getAuthenticatedClient, login, logout, identifyLegacyTokens } from './auth/session.js';
 export {
   resolveCredentials,
   saveCredentials,

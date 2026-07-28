@@ -226,6 +226,29 @@ async function pasteFlow({ deps, credentials, state, challenge }) {
   return { code, redirectUri };
 }
 
+/**
+ * Exchange a legacy token file's tokens for the channel identity that owns them.
+ *
+ * The legacy file carries no channel id, so `import-legacy` must ask Google who
+ * these tokens belong to before anything is stored. The call is wrapped in
+ * `mapGoogleError` for the same reason `login()` wraps its own: an expired
+ * refresh token is the *expected* outcome of a migration — people migrate
+ * precisely because the old setup went stale — and it must surface as
+ * AUTH_TOKEN_EXPIRED with a `ytstats login` next step, not as UNEXPECTED
+ * telling the user to file a bug against a tool that is working correctly.
+ */
+export async function identifyLegacyTokens({ credentials, tokens, deps: injected } = {}) {
+  const deps = { ...defaultDeps(), ...injected };
+  const client = newClient(deps, credentials, 'http://127.0.0.1');
+  client.setCredentials(tokens);
+
+  try {
+    return await deps.fetchIdentity(client);
+  } catch (err) {
+    throw mapGoogleError(err);
+  }
+}
+
 function extractCode(input) {
   const text = String(input ?? '').trim();
   if (!text) return null;

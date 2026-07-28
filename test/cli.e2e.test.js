@@ -31,6 +31,23 @@ describe('ytstats CLI (end to end)', () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ytstats-e2e-')); });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+  describe('import-legacy', () => {
+    it('reports an unreadable token file as bad input, not an internal error', async () => {
+      // A mistyped path is ordinary during a migration. Reporting UNEXPECTED
+      // ("a bug worth reporting", recoverable:false) tells the user to file an
+      // issue against a tool that is behaving correctly, and stops an agent dead.
+      const { code, stdout } = await ytstats(
+        ['import-legacy', './does-not-exist.json'],
+        { configDir: dir },
+      );
+      const env = JSON.parse(stdout);
+      expect(env.ok).toBe(false);
+      expect(env.errors[0].code).not.toBe('UNEXPECTED');
+      expect(env.errors[0].recoverable).toBe(true);
+      expect(code).not.toBe(EXIT_CODES.GENERAL);
+    });
+  });
+
   describe('help and version', () => {
     it('--version prints the package version', async () => {
       const { code, stdout } = await ytstats(['--version'], { configDir: dir });

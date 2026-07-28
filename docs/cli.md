@@ -154,7 +154,9 @@ Sets the default channel for subsequent commands. Fails if that channel is not s
 ytstats import-legacy <tokensFile> [-c|--client-secret <path>]
 ```
 
-Imports tokens from a pre-`ytstats` project-local `tokens.json`. The legacy file holds no channel identity, so the tokens are exchanged for one before anything is stored. Never overwrites an account that already exists — it returns `{ migrated: false, reason }` instead, where `reason` is one of `no-legacy-file`, `no-refresh-token`, `unknown-channel`, or `already-logged-in`.
+Imports tokens from a pre-`ytstats` project-local `tokens.json`. The legacy file holds no channel identity, so the tokens are exchanged for one before anything is stored. Never overwrites an account that already exists — it returns `{ migrated: false, reason }` instead, where `reason` is one of `no-refresh-token`, `unknown-channel`, or `already-logged-in`.
+
+An expired legacy refresh token fails with `AUTH_TOKEN_EXPIRED` and a `ytstats login` next step — the ordinary outcome when the old setup went stale. An unreadable path fails earlier with `INPUT_INVALID_VALUE`, which is why the CLI never returns the `no-legacy-file` reason that `migrateLegacyTokens()` still reports to library callers.
 
 ## fetch
 

@@ -106,6 +106,18 @@ The same reasoning applies to the refresh write-back path: `client.on('tokens', 
 
 **Where handled:** the order of the `loadAccount()` / `AUTH_ACCOUNT_UNKNOWN` block and the `AUTH_CLIENT_MISMATCH` block in `src/auth/session.js`.
 
+## An expired legacy token is the expected outcome of a migration
+
+`import-legacy` exchanges the old tokens for a channel identity before storing anything. That call must be wrapped in `mapGoogleError`, and originally was not — it was the one Google call in the codebase that escaped the mapping, because it built its own `googleapis` client inline instead of going through `createApis()`.
+
+The consequence was backwards. A stale refresh token is not an edge case during a migration; it is the *reason* people migrate. But the raw error reached `run()`'s catch unrecognised and surfaced as `UNEXPECTED` — "a bug worth reporting", `recoverable: false`, exit 1 — telling the user to file an issue against a tool that was working correctly. Worse, `recoverable: false` is the signal that stops an agent entirely, so an automated caller halted where it should have run `ytstats login`.
+
+It now maps to `AUTH_TOKEN_EXPIRED`, `recoverable: true`, exit 2, with `ytstats login` as `nextSteps[0]`. The same applies to an unreadable token file, which is now `INPUT_INVALID_VALUE` rather than `UNEXPECTED` — a mistyped path is equally ordinary.
+
+The general rule this encodes: **any call that can fail with a Google error must go through `mapGoogleError`.** A bare `await` on a googleapis promise anywhere in the codebase is a latent `UNEXPECTED`.
+
+**Where handled:** `identifyLegacyTokens()` in `src/auth/session.js`, called by the `import-legacy` action in `src/cli.js`.
+
 ## The loopback server binds 127.0.0.1, never 0.0.0.0
 
 Binding `0.0.0.0` would expose the callback listener — and therefore the authorization code — to anything on the local network. The server binds `127.0.0.1` on an ephemeral port (`server.listen(0, '127.0.0.1')`).

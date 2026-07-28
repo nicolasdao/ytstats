@@ -182,7 +182,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 296,
+      "line_count": 298,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -349,13 +349,14 @@
         "One config directory holds one OAuth client, but many channels",
         "An absent client binding is unknown, not a mismatch",
         "The account selector is checked before the client binding",
+        "An expired legacy token is the expected outcome of a migration",
         "The loopback server binds 127.0.0.1, never 0.0.0.0",
         "The favicon request is not the callback",
         "--no-browser uses a deliberately dead redirect URI",
         "Logout removes local tokens even when revocation fails",
         "A read-only config dir must not break a working command"
       ],
-      "line_count": 145,
+      "line_count": 157,
       "links_to": [
         "docs/auth.md",
         "docs/gotchas/config-storage.md"
@@ -490,13 +491,15 @@
         "Retention ratios legitimately exceed 1.0",
         "Two content-type vocabularies disagree",
         "Subscriber counts are rounded",
+        "The reach CSV columns are not called impressions",
+        "A hand-rolled Error loses the HTTP status",
         "Reporting API CSVs need a real CSV parser",
         "Reporting API dates arrive in a different format",
         "CSV cells with a leading zero must stay strings",
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 132,
+      "line_count": 158,
       "links_to": [
         "docs/gotchas/auth.md",
         "docs/youtube-apis.md"
@@ -585,7 +588,7 @@
         "What is not covered",
         "Adding tests"
       ],
-      "line_count": 93,
+      "line_count": 95,
       "links_to": [
         "docs/contributing.md"
       ],
@@ -631,7 +634,7 @@
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 180,
+      "line_count": 190,
       "links_to": [
         "docs/gotchas/youtube-api.md"
       ],

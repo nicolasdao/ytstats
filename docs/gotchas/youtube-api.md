@@ -84,6 +84,32 @@ Above 1,000 subscribers the Data API returns counts rounded to 3 significant fig
 
 **Where handled:** nothing to handle, but `normalizeChannel()` in `src/api/transforms.js` carries a comment so the rounding is not mistaken for a bug.
 
+## The reach CSV columns are not called impressions
+
+`channel_reach_basic_a1` emits these headers:
+
+```
+date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr
+```
+
+Not `impressions` / `impressions_ctr`, which is what the obvious reading of the row object suggests. `fetchReach` originally read the short names, so `row.impressions` was `undefined` on every row and `?? null` turned the whole result into nulls.
+
+That failure mode is the dangerous part. The job existed, the download succeeded, the CSV parsed, the row count was right, and `ok` stayed `true` with **no warning** — a response indistinguishable from a channel that genuinely has no impressions. It is invisible to every signal a caller has: no error code, no `recoverable: false`, nothing to retry. A live channel returned 373 null rows for two months while real data sat behind the wrong key.
+
+Prefer asserting a **value** over a shape when a transform maps external column names. A test that only checks `rows.length` passes against a fully-null result.
+
+**Where handled:** the `video_thumbnail_impressions` reads in `fetchReach()`, `src/api/reporting.js`, pinned by tests using the real header in `test/api/fetchers.test.js`.
+
+## A hand-rolled Error loses the HTTP status
+
+`downloadCsv` is a bare `fetch`, not a googleapis client call, so a non-OK response has to be turned into an error by hand. Writing `throw new Error(\`Failed to download report (${res.status})\`)` folds the status into prose and discards it as structure — and `diagnoseGoogleError()` reads `err.response?.status ?? err.status`, so it has nothing to classify on. A transient Google 5xx then became `UNEXPECTED` with `recoverable: false`, permanently halting a caller on a hiccup that `API_UNAVAILABLE` marks retryable.
+
+Two things were needed, and either alone is insufficient: the throw must carry `status` (and `response.status`), **and** the call site must go through `call()` like every other request in `src/api/reporting.js`. The call site had been missed.
+
+The general rule: **every path that can fail with a Google error must reach `mapGoogleError`.** A bare `await` on a request, or a hand-built `Error`, is a latent `UNEXPECTED`.
+
+**Where handled:** the status-preserving throw in `downloadCsv()` (`src/api/client.js`) and the `call()` wrapper around it in `fetchReach()` (`src/api/reporting.js`).
+
 ## Reporting API CSVs need a real CSV parser
 
 Report bodies contain video titles and search terms, which routinely include commas and quotes. Splitting on `,` silently corrupts rows, and the corruption is quiet — it produces plausible-looking wrong data rather than an error.

@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Report an expired legacy refresh token during `import-legacy` as
+  `AUTH_TOKEN_EXPIRED` rather than `UNEXPECTED`. The identity lookup was the one
+  Google call not wrapped in `mapGoogleError`, so a stale token — the most
+  predictable outcome of a migration, since people migrate precisely because the
+  old setup went stale — surfaced as an internal error telling the user to report
+  a bug, with `recoverable: false` halting any agent that respects it. It now
+  carries `recoverable: true` and a `ytstats login` next step, and exits 2 rather
+  than 1.
+- Report an unreadable or malformed legacy token file as `INPUT_INVALID_VALUE`
+  rather than `UNEXPECTED`. A mistyped path is ordinary during a migration.
+- Read the correct columns from the reach report. `channel_reach_basic_a1` emits
+  `video_thumbnail_impressions` and `video_thumbnail_impressions_ctr`, but
+  `fetchReach` read `impressions` and `impressions_ctr`, so every row resolved to
+  `null` while the command still reported `ok: true` with no warning — a silent
+  failure indistinguishable from a channel with no impressions. `ytstats reach`
+  and `fetch --reach` returned empty CTR data for every user affected.
+- Classify a failed reach report download by its HTTP status. `downloadCsv` folded
+  the status into a message string and the call skipped `call()`, so a transient
+  Google 5xx surfaced as `UNEXPECTED` with `recoverable: false` — halting a caller
+  permanently on a hiccup that `API_UNAVAILABLE` would have marked retryable.
+
+### Added
+
+- `identifyLegacyTokens` is exported from `src/index.js`, exchanging a legacy
+  token file's tokens for the channel identity that owns them.
+
 ## [0.2.0] - 2026-07-28
 
 ### Added

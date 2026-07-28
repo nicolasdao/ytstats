@@ -276,3 +276,82 @@ describe('Reporting API — reach', () => {
     expect(await listReachJobs(apis)).toHaveLength(2);
   });
 });
+
+describe('reach report download error classification', () => {
+  const job = { id: 'job-1', reportTypeId: 'channel_basic_a2' };
+
+  function apisThatFailDownloadWith(status) {
+    return {
+      reporting: {
+        jobs: {
+          list: async () => ({ data: { jobs: [job] } }),
+          create: async () => ({ data: job }),
+          reports: {
+            list: async () => ({ data: { reports: [{ id: 'r1', downloadUrl: 'https://x/y', startTime: '2026-07-01T00:00:00Z' }] } }),
+          },
+        },
+      },
+      // Mirrors the real downloadCsv: status preserved as structure, not prose.
+      downloadCsv: async () => {
+        const err = new Error(`Failed to download report (${status} Server Error)`);
+        err.status = status;
+        err.response = { status, data: undefined };
+        throw err;
+      },
+    };
+  }
+
+  it('classifies a Google 5xx as API_UNAVAILABLE, so a caller knows to retry', async () => {
+    // Previously this escaped call() entirely and surfaced as UNEXPECTED with
+    // recoverable:false — permanently halting an agent on a transient hiccup.
+    const err = await fetchReach(apisThatFailDownloadWith(500), {}).catch(e => e);
+    expect(err.diagnostic.code).toBe('API_UNAVAILABLE');
+    expect(err.diagnostic.retryable).toBe(true);
+    expect(err.diagnostic.recoverable).toBe(true);
+  });
+
+  it('classifies a 403 on download as API_FORBIDDEN, not UNEXPECTED', async () => {
+    const err = await fetchReach(apisThatFailDownloadWith(403), {}).catch(e => e);
+    expect(err.diagnostic.code).toBe('API_FORBIDDEN');
+  });
+});
+
+describe('reach CSV column names', () => {
+  const job = { id: 'job-1', reportTypeId: 'channel_reach_basic_a1' };
+
+  // The real channel_reach_basic_a1 header, captured from a live report.
+  const CSV = [
+    'date,channel_id,video_id,video_thumbnail_impressions,video_thumbnail_impressions_ctr',
+    '20260725,UCnet,12OZx2jtfw0,1240,0.0561',
+    '20260726,UCnet,e-Ni5p9LmxY,880,0.0312',
+  ].join('\n');
+
+  const apis = {
+    reporting: {
+      jobs: {
+        list: async () => ({ data: { jobs: [job] } }),
+        create: async () => ({ data: job }),
+        reports: {
+          list: async () => ({ data: { reports: [{ id: 'r1', downloadUrl: 'https://x/y', startTime: '2026-07-25T00:00:00Z' }] } }),
+        },
+      },
+    },
+    downloadCsv: async () => CSV,
+  };
+
+  it('reads the video_thumbnail_impressions columns the report actually uses', async () => {
+    // Reading `impressions` / `impressions_ctr` yields undefined for every row,
+    // which ?? null turns into ok:true with a full set of null rows — a silent
+    // failure with no warning, indistinguishable from a channel with no data.
+    const out = await fetchReach(apis, {});
+    const row = out.rows.find(r => r.videoId === '12OZx2jtfw0');
+    expect(row.impressions).toBe(1240);
+    expect(row.impressionsCtr).toBeCloseTo(0.0561);
+  });
+
+  it('never returns rows where every impression field is null', async () => {
+    const out = await fetchReach(apis, {});
+    expect(out.rows.length).toBeGreaterThan(0);
+    expect(out.rows.every(r => r.impressions === null)).toBe(false);
+  });
+});

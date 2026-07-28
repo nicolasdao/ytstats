@@ -31,7 +31,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 ## Design principles
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 332 tests run without a network connection and without opening a browser.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 341 tests run without a network connection and without opening a browser.
 
 **Pure logic is separated from effects.** `api/transforms.js`, `dates.js`, `config/paths.js` and `diagnostics.js` are pure and directly tested. Everything awkward to test is pushed to the edges.
 
@@ -105,7 +105,7 @@ The exported surface, grouped:
 
 | Group | Exports |
 |---|---|
-| Session | `getAuthenticatedClient`, `login`, `logout` |
+| Session | `getAuthenticatedClient`, `login`, `logout`, `identifyLegacyTokens` |
 | Credentials | `resolveCredentials`, `saveCredentials`, `clearCredentials`, `loadStoredCredentials`, `discoverClientSecretFile`, `parseClientSecret` |
 | Accounts | `loadAccount`, `listAccounts`, `saveAccount`, `removeAccount`, `setDefaultAccount`, `clearAllAccounts`, `migrateLegacyTokens` |
 | APIs | `createApis`, `data`, `analytics`, `reporting` (namespace exports), plus everything in `api/transforms.js` |
