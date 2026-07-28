@@ -94,12 +94,59 @@ The two rules that catch the most regressions:
 
 The package is published to npm. `files` in `package.json` limits the tarball to `bin/`, `src/`, `docs/`, `README.md`, `CHANGELOG.md`, and `LICENSE` — tests and config are not shipped.
 
+A release has two halves, and the split is deliberate:
+
+| Half | Steps | Automated? |
+|---|---|---|
+| **Cut the release** | Version bump, changelog, commit, tag | Yes — the `release-cli` skill |
+| **Ship to production** | `git push`, `npm publish` | No — always manual |
+
+Nothing publishes to npm without a human running `npm publish`. That boundary is the point, not an unfinished feature.
+
+### Cutting a release manually
+
+These steps are the contract. The skill below automates them; it does not replace them.
+
 1. Make sure `npm test` passes. `prepublishOnly` runs it again and blocks publication on failure.
 2. Update `CHANGELOG.md`. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): move entries out of `## [Unreleased]` into a new version heading with its date, and update the link references at the bottom.
-3. Bump the version in `package.json` following [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Removing or repurposing a diagnostic `code`, changing the envelope shape, or dropping a command is a **major** bump.
-4. `npm publish`.
+3. Bump the version in `package.json` following [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Removing or repurposing a diagnostic `code`, changing the envelope shape, or dropping a command is a **major** bump — see [The stability contract](#the-stability-contract).
+4. Commit `package.json` and `CHANGELOG.md` only, as `chore(release): ytstats v<version>`.
+5. Tag it: `git tag -a v<version> -m "Release v<version>"`.
 
 `meta.version` in the envelope is read from `package.json` at runtime, so it tracks the bump automatically.
+
+### Cutting a release with the release-cli skill
+
+`release-cli` is an AI-agent skill that performs steps 1-5 above. It is **optional tooling, not a project dependency** — it lives in `.agents/skills/release-cli/` and is excluded from the npm tarball, so a clone or an npm install does not necessarily have it. Install it with [HappySkills](https://happyskills.ai) if it is absent.
+
+```bash
+/release-cli                              # analyze changes and propose a bump
+/release-cli minor "Added --json-lines"   # force the bump level, supply a note
+/release-cli unreleased                   # record changes only, no bump or tag
+```
+
+**Three gates must pass before it will cut a release**, and none can be overridden:
+
+1. The working directory is clean. A release commits only `package.json` and `CHANGELOG.md`, so uncommitted code would produce a tag whose commit does not contain the changes it ships.
+2. `npm test` passes.
+3. `## [Unreleased]` is non-empty — it refuses to stamp an empty version.
+
+**It warns on breaking changes rather than deciding for you.** The skill scans the diff for this project's documented major-bump triggers — a removed or repurposed diagnostic `code`, an envelope key that changed or became conditional, a dropped command, a remapped exit code, a dropped `src/index.js` export — and asks you to confirm the bump when it finds one. It is a `grep`-and-diff heuristic: it cannot see a code whose *meaning* changed while its string stayed the same, so it is a safety net, not a substitute for knowing what you changed.
+
+**The `unreleased` ledger mode** records changes into `## [Unreleased]` without bumping or tagging. It appends rather than replaces, so several sessions working the same branch can each record their own work and the next release promotes the whole section — instead of one session reconstructing everyone's scope from `git log` at release time.
+
+### Shipping to production
+
+After the tag exists, deployment is two manual commands:
+
+```bash
+git push && git push --tags
+npm publish
+```
+
+`prepublishOnly` re-runs the full test suite as the last gate before the tarball is built.
+
+> This repository currently has **no git remote configured**, so `git push` will fail until one is added. It also has no tags — `v0.1.0` shipped per the changelog but was never tagged, which leaves the `compare/v0.1.0...HEAD` link in `CHANGELOG.md` unresolved. Backfilling that tag would repair the link and give future releases a baseline to diff against.
 
 ## Documentation
 

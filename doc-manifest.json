@@ -263,9 +263,12 @@
         "The gaxios override",
         "Testing requirements",
         "Release process",
+        "Cutting a release manually",
+        "Cutting a release with the release-cli skill",
+        "Shipping to production",
         "Documentation"
       ],
-      "line_count": 108,
+      "line_count": 155,
       "links_to": [
         "README.md",
         "docs/architecture.md",
