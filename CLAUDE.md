@@ -39,7 +39,7 @@ These are public API. Breaking one requires a major version bump — see [docs/c
 
 ## Working norms
 
-- **Tests must stay green and offline.** `npm test` runs 316 tests with no network access. Every effect is injected; keep it that way.
+- **Tests must stay green and offline.** `npm test` runs 332 tests with no network access. Every effect is injected; keep it that way.
 - **API fetchers assert exact query parameters**, not just return shapes. That is what pins the undocumented YouTube API limits (`MAX_VIDEO_ROWS` 200, `MAX_DETAIL_ROWS` 25).
 - **Keep documentation in sync.** Docs carry `source` globs in frontmatter; `doc-manifest.json` is generated, never hand-edited. Regenerate it after any doc change.
 - **No new runtime dependencies without good reason.** Currently `commander`, `googleapis`, `open` — all pure JS, so `npx ytstats` starts instantly.

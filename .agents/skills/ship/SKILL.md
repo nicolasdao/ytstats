@@ -38,7 +38,9 @@ Invoke the `git-commit` skill via the Skill tool. `git-commit` is **session-awar
 
 Pass guidance to this effect:
 
-> Commit the ENTIRE working tree, not only files changed during this session. Stage every modification, addition, deletion, and untracked file — including changes that predate this session — then commit them. Do not filter by session provenance.
+> Commit the ENTIRE working tree, not only files changed during this session. Stage every modification, addition, deletion, and untracked file — including changes that predate this session — then commit them. Do not filter by session provenance. Stage them by listing every path explicitly on the `git add` command line; do not use `git add -A` or `git add .`.
+
+**Say how to stage, not only what to stage.** "Everything in the tree" invites `git add -A`, which both `git-commit` and this project's `CLAUDE.md` forbid outright — `CLAUDE.md` because untracked tooling under `.agents/skills/` must not be swept in unreviewed. Naming every path explicitly reaches the same 100% coverage while keeping that protection, so the guidance must carry the mechanism or the conflict resurfaces on every run.
 
 Before invoking it, show the user what is about to be swept up, so the breadth of the commit is visible rather than implied:
 
@@ -82,6 +84,7 @@ If `## [Unreleased]` is empty, `release-cli` will refuse to stamp a version. Tha
 ## Constraints
 
 - **NEVER** reorder the three steps. Step 3 depends on Step 2 having completed.
+- **NEVER** instruct `git-commit` to use `git add -A` or `git add .` — forbidden by both that skill and `CLAUDE.md`. Achieve full coverage by naming every path instead.
 - **NEVER** run `git push` or `npm publish`, and never offer to as part of this chain.
 - **NEVER** substitute your own commit for the `git-commit` skill — it owns the conventional-commit message format that the changelog depends on.
 - **ALWAYS** verify the tree with `git status --porcelain` between the commit and the release.

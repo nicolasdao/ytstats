@@ -146,7 +146,7 @@ npm publish
 
 `prepublishOnly` re-runs the full test suite as the last gate before the tarball is built.
 
-> This repository currently has **no git remote configured**, so `git push` will fail until one is added. It also has no tags — `v0.1.0` shipped per the changelog but was never tagged, which leaves the `compare/v0.1.0...HEAD` link in `CHANGELOG.md` unresolved. Backfilling that tag would repair the link and give future releases a baseline to diff against.
+`origin` points at <https://github.com/nicolasdao/ytstats.git>, and every release from `v0.1.0` onward is tagged, so the `compare/` links in `CHANGELOG.md` resolve and each release has a baseline to diff against.
 
 ## Documentation
 
