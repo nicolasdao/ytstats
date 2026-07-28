@@ -1,0 +1,21 @@
+{
+	"name": "ship",
+	"version": "0.1.0",
+	"description": "Chains three release steps — update-doc syncs docs, git-commit commits the entire working tree (not just session changes), release-cli bumps and tags. Stops at the tag; never pushes or publishes.",
+	"type": "skill",
+	"dependencies": {
+		"nicolasdao/update-doc": "^1.9.0",
+		"nicolasdao/git-commit": "^1.1.0"
+	},
+	"systemDependencies": {
+		"git": {
+			"description": "Used to display the pending working-tree changes before committing and to verify the tree is clean before the release step.",
+			"check": "git --version",
+			"install": {
+				"darwin": "xcode-select --install",
+				"linux": "sudo apt-get install -y git",
+				"win32": "winget install --id Git.Git -e"
+			}
+		}
+	}
+}
