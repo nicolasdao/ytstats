@@ -101,7 +101,45 @@ describe('credential resolution precedence', () => {
     expect(got.source).toBe('environment');
   });
 
-  it('3. stored credentials win over cwd auto-discovery', () => {
+  it('3. YTSTATS_CREDENTIALS_FILE wins over stored credentials', () => {
+    const file = writeSecretFile(cwd, 'pointed-at.json', INSTALLED);
+    saveCredentials({ clientId: 'stored', clientSecret: 'stored-secret' });
+    const got = resolveCredentials({ env: { YTSTATS_CREDENTIALS_FILE: file }, cwd });
+    expect(got.clientId).toBe('123-abc.apps.googleusercontent.com');
+    expect(got.source).toMatch(/pointed-at\.json$/);
+  });
+
+  it('3. the env-var pair still beats YTSTATS_CREDENTIALS_FILE', () => {
+    // Purely additive: anyone already exporting the pair sees no change.
+    const file = writeSecretFile(cwd, 'pointed-at.json', INSTALLED);
+    const got = resolveCredentials({
+      env: {
+        YTSTATS_CLIENT_ID: 'env',
+        YTSTATS_CLIENT_SECRET: 'env-secret',
+        YTSTATS_CREDENTIALS_FILE: file,
+      },
+      cwd,
+    });
+    expect(got.source).toBe('environment');
+  });
+
+  it('3. names the env var, not --client-secret, when its path is unreadable', () => {
+    const err = (() => {
+      try {
+        resolveCredentials({ env: { YTSTATS_CREDENTIALS_FILE: path.join(cwd, 'ghost.json') }, cwd });
+      } catch (e) { return e; }
+    })();
+    expect(err.code).toBe('AUTH_CREDENTIALS_NOT_FOUND');
+    expect(err.diagnostic.context.flag).toBe('YTSTATS_CREDENTIALS_FILE');
+  });
+
+  it('3. reads the same file shapes the --client-secret flag accepts', () => {
+    const file = writeSecretFile(cwd, 'web-shape.json', WEB);
+    const got = resolveCredentials({ env: { YTSTATS_CREDENTIALS_FILE: file }, cwd });
+    expect(got.clientId).toBe('456-web.apps.googleusercontent.com');
+  });
+
+  it('4. stored credentials win over cwd auto-discovery', () => {
     writeSecretFile(cwd, 'client_secret_999.json', INSTALLED);
     saveCredentials({ clientId: 'stored', clientSecret: 'stored-secret' });
     const got = resolveCredentials({ env: {}, cwd });
@@ -109,7 +147,7 @@ describe('credential resolution precedence', () => {
     expect(got.source).toBe('stored');
   });
 
-  it('4. falls back to auto-discovering client_secret*.json in the working dir', () => {
+  it('5. falls back to auto-discovering client_secret*.json in the working dir', () => {
     writeSecretFile(cwd, 'client_secret_999.json', INSTALLED);
     const got = resolveCredentials({ env: {}, cwd });
     expect(got.clientId).toBe('123-abc.apps.googleusercontent.com');
@@ -123,6 +161,15 @@ describe('credential resolution precedence', () => {
     expect(err.code).toBe('AUTH_NO_CREDENTIALS');
     expect(err.diagnostic.remediation.steps.join(' ')).toMatch(/console\.cloud\.google\.com/);
     expect(err.diagnostic.remediation.steps.join(' ')).toMatch(/Desktop app/);
+  });
+
+  it('names every source it searched, so nothing looks unexplored', () => {
+    const err = (() => {
+      try { resolveCredentials({ env: {}, cwd }); } catch (e) { return e; }
+    })();
+    expect(err.diagnostic.detail).toMatch(/--client-secret/);
+    expect(err.diagnostic.detail).toMatch(/YTSTATS_CLIENT_ID/);
+    expect(err.diagnostic.detail).toMatch(/YTSTATS_CREDENTIALS_FILE/);
   });
 
   it('ignores a half-set env pair rather than producing broken credentials', () => {

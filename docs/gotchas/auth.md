@@ -82,6 +82,30 @@ The caller turns that `null` into `AUTH_ACCOUNT_UNKNOWN`, listing the channels t
 
 **Where handled:** `loadAccount()` in `src/auth/tokens.js`; the `AUTH_ACCOUNT_UNKNOWN` branch in `getAuthenticatedClient()`.
 
+## One config directory holds one OAuth client, but many channels
+
+`tokens.json` is keyed by channel and holds as many as you log into. `credentials.json` is a **single** record for the whole directory. The two structures disagree, and a second `ytstats login` with a different `client_secret` file silently overwrites the stored client while the first channel's tokens stay put.
+
+Google binds a refresh token to the client that issued it, so the next command for that first channel refreshes with the wrong client and Google answers `invalid_grant`. That maps to `AUTH_TOKEN_EXPIRED`, whose cause names a Testing-mode consent screen — so the user publishes their consent screen, which changes nothing, and is now further from the answer than when they started. A misdiagnosis is more expensive than an error.
+
+Only reachable with two Google Cloud projects; the ordinary case of several channels under one project is consistent. The fix for the multi-project case is a config directory per client, since `YTSTATS_CONFIG_DIR` moves credentials and tokens together.
+
+**Where handled:** `saveAccount()` in `src/auth/tokens.js` records `clientId` at login; the comparison in `getAuthenticatedClient()` (`src/auth/session.js`) throws `AUTH_CLIENT_MISMATCH` before the refresh can happen.
+
+## An absent client binding is unknown, not a mismatch
+
+The mismatch check runs only when `account.clientId` is set. Accounts written before that field existed have none, and treating absent as "does not match" would reject every pre-existing account on upgrade — logging out every user to protect against a problem most of them do not have.
+
+The same reasoning applies to the refresh write-back path: `client.on('tokens', …)` calls `saveAccount()` with a partial payload and no `clientId`, so `saveAccount()` falls back to the existing value rather than nulling it. Dropping it there would disarm the check after the first refresh, which is precisely when it is still needed.
+
+**Where handled:** the `account.clientId &&` guard in `getAuthenticatedClient()`; the `clientId ?? existing?.clientId ?? null` fallback in `saveAccount()`.
+
+## The account selector is checked before the client binding
+
+`getAuthenticatedClient()` resolves credentials, then the account, then the binding. An unknown `--account` is the more specific complaint, and reporting a client mismatch for a channel that is not signed in at all would misdirect exactly the way the ordering elsewhere in this file exists to prevent.
+
+**Where handled:** the order of the `loadAccount()` / `AUTH_ACCOUNT_UNKNOWN` block and the `AUTH_CLIENT_MISMATCH` block in `src/auth/session.js`.
+
 ## The loopback server binds 127.0.0.1, never 0.0.0.0
 
 Binding `0.0.0.0` would expose the callback listener — and therefore the authorization code — to anything on the local network. The server binds `127.0.0.1` on an ephemeral port (`server.listen(0, '127.0.0.1')`).

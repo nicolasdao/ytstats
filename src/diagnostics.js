@@ -172,6 +172,41 @@ export const DIAGNOSTICS = {
     },
   }),
 
+  AUTH_CLIENT_MISMATCH: def({
+    code: 'AUTH_CLIENT_MISMATCH',
+    exitCode: EXIT.AUTH,
+    recoverable: true,
+    retryable: false,
+    title: 'Stored token belongs to a different OAuth client',
+    detail:
+      'This channel was authorized with one Google Cloud OAuth client, but a different client ID was ' +
+      'resolved for this run. Google binds a refresh token to the client that issued it, so refreshing ' +
+      'with the wrong client would fail as invalid_grant — which reads like an expired token and sends ' +
+      'you to fix the wrong thing.',
+    cause:
+      'Usually a second ytstats login with a different client_secret file overwrote the stored ' +
+      'credentials while another channel was still signed in, since credentials.json holds one client ' +
+      'for the whole config directory. Also reached by setting YTSTATS_CLIENT_ID/SECRET or ' +
+      'YTSTATS_CREDENTIALS_FILE to a different client than the one this channel was authorized with.',
+    remediation: {
+      summary:
+        'Give each OAuth client its own config directory, or re-authorize this channel with the client ' +
+        'that is now resolving.',
+      steps: [
+        'Run: ytstats status  — clientId shows what resolved, and each account shows the client it was authorized with.',
+        'To keep several clients side by side, isolate them: export YTSTATS_CONFIG_DIR=~/.ytstats/<name>',
+        'Point at that client\'s file in the same shell: export YTSTATS_CREDENTIALS_FILE=/path/to/client_secret.json',
+        'Or, to consolidate on the client that is resolving now, re-run: ytstats login',
+      ],
+      commands: [
+        STATUS_CMD,
+        { run: 'ytstats login', description: 'Re-authorize this channel with the client that is resolving now' },
+        DOCTOR_CMD,
+      ],
+      docs: [SETUP_DOC],
+    },
+  }),
+
   AUTH_CONSENT_DECLINED: def({
     code: 'AUTH_CONSENT_DECLINED',
     exitCode: EXIT.AUTH,

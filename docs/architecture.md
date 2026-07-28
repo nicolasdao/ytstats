@@ -31,7 +31,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 ## Design principles
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 316 tests run without a network connection and without opening a browser.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 332 tests run without a network connection and without opening a browser.
 
 **Pure logic is separated from effects.** `api/transforms.js`, `dates.js`, `config/paths.js` and `diagnostics.js` are pure and directly tested. Everything awkward to test is pushed to the edges.
 
@@ -49,7 +49,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 | `config/store.js` | Atomic `0600` JSON read/write, traversal-safe filenames. |
 | `auth/credentials.js` | BYO credential resolution and validation. Rejects service accounts and malformed client IDs before they cost a browser round trip. |
 | `auth/oauth.js` | PKCE pair, CSRF state, loopback callback server, auth URL builder, scope list. |
-| `auth/tokens.js` | Multi-account token store keyed by channel; legacy import. |
+| `auth/tokens.js` | Multi-account token store keyed by channel; records which OAuth client issued each account's token; legacy import. |
 | `auth/session.js` | Ties the above together: `login`, `logout`, `getAuthenticatedClient` with refresh persistence. |
 | `api/client.js` | Builds the three API surfaces plus an authenticated CSV downloader; wraps calls in error mapping. |
 | `api/transforms.js` | Pure shaping: duration parsing, content classification, CSV, date normalization, row zipping. |

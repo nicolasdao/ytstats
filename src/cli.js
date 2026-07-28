@@ -196,8 +196,14 @@ export function buildProgram(deps = {}) {
     .action(run('status', async () => {
       const accounts = listAccounts();
       let credentialSource = null;
+      let clientId = null;
       try {
-        credentialSource = resolveCredentials().source;
+        // A client ID is public by OAuth design — only the secret is sensitive —
+        // and with five resolution sources, "which one did it pick" is not
+        // answerable from the source label alone.
+        const credentials = resolveCredentials();
+        credentialSource = credentials.source;
+        clientId = credentials.clientId;
       } catch {
         // Not configured yet; reported as null below.
       }
@@ -205,6 +211,7 @@ export function buildProgram(deps = {}) {
         authenticated: accounts.length > 0,
         configDir: configDir(),
         credentialSource,
+        clientId,
         accounts,
         setupGuide: accounts.length === 0 ? SETUP_GUIDE : undefined,
       };

@@ -76,6 +76,21 @@ export function getAuthenticatedClient({ account: selector, clientSecretPath, en
       detail: `OAuth client resolved from: ${credentials.source}`,
     });
   }
+
+  // Google binds a refresh token to the client that issued it, so a mismatch
+  // here fails at refresh time as invalid_grant — which maps to
+  // AUTH_TOKEN_EXPIRED and blames the consent screen. Diagnose it precisely
+  // instead. Accounts stored before clientId was recorded have none, and must
+  // keep working: only an actual disagreement is an error.
+  if (account.clientId && account.clientId !== credentials.clientId) {
+    throw fail(DIAGNOSTICS.AUTH_CLIENT_MISMATCH, {
+      account: account.channelTitle ?? account.channelId,
+      expected: account.clientId,
+      value: credentials.clientId,
+      detail: `Resolved from: ${credentials.source}`,
+    });
+  }
+
   const client = newClient(deps, credentials, 'http://127.0.0.1');
   client.setCredentials(account.tokens);
 
@@ -87,6 +102,7 @@ export function getAuthenticatedClient({ account: selector, clientSecretPath, en
         channelId: account.channelId,
         channelTitle: account.channelTitle,
         customUrl: account.customUrl,
+        clientId: account.clientId,
         tokens,
       });
     } catch {
@@ -153,6 +169,9 @@ export async function login({
     channelId: identity.channelId,
     channelTitle: identity.channelTitle,
     customUrl: identity.customUrl,
+    // Record which client issued this token, so a later run with different
+    // credentials resolved can say so precisely rather than failing at refresh.
+    clientId: credentials.clientId,
     tokens,
   });
 

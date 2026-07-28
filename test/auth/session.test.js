@@ -66,6 +66,52 @@ describe('getAuthenticatedClient', () => {
     expect(err.diagnostic.remediation.steps.join(' ')).toMatch(/console\.cloud\.google\.com/);
   });
 
+  it('rejects a token issued by a different OAuth client, precisely', () => {
+    // Google binds a refresh token to the issuing client, so this would fail at
+    // refresh time as invalid_grant -> AUTH_TOKEN_EXPIRED, which blames the
+    // consent screen and sends the caller to fix entirely the wrong thing.
+    saveCredentials({ clientId: 'client-B', clientSecret: 'sec-B' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', clientId: 'client-A', tokens: TOKENS });
+
+    const err = (() => {
+      try { getAuthenticatedClient({ deps: deps(), env: {}, cwd: tmp.dir }); } catch (e) { return e; }
+    })();
+
+    expect(err.code).toBe('AUTH_CLIENT_MISMATCH');
+    expect(err.diagnostic.context.expected).toBe('client-A');
+    expect(err.diagnostic.context.value).toBe('client-B');
+    expect(err.diagnostic.retryable).toBe(false);
+  });
+
+  it('allows an account whose client matches the resolved one', () => {
+    saveCredentials({ clientId: 'client-A', clientSecret: 'sec-A' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', clientId: 'client-A', tokens: TOKENS });
+    const { account } = getAuthenticatedClient({ deps: deps(), env: {}, cwd: tmp.dir });
+    expect(account.channelId).toBe('UC-abc');
+  });
+
+  it('allows an account stored before clientId was recorded', () => {
+    // Backward compatibility: an absent binding is unknown, not a mismatch.
+    // Failing these would log out every existing user on upgrade.
+    saveCredentials({ clientId: 'client-B', clientSecret: 'sec-B' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
+    const { account } = getAuthenticatedClient({ deps: deps(), env: {}, cwd: tmp.dir });
+    expect(account.channelId).toBe('UC-abc');
+  });
+
+  it('checks the account selector before the client binding', () => {
+    // An unknown --account is the more specific complaint; reporting a mismatch
+    // for a channel that is not even signed in would misdirect.
+    saveCredentials({ clientId: 'client-B', clientSecret: 'sec-B' });
+    saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', clientId: 'client-A', tokens: TOKENS });
+    const err = (() => {
+      try {
+        getAuthenticatedClient({ account: 'UC-nope', deps: deps(), env: {}, cwd: tmp.dir });
+      } catch (e) { return e; }
+    })();
+    expect(err.code).toBe('AUTH_ACCOUNT_UNKNOWN');
+  });
+
   it('throws MISSING_CREDENTIALS when tokens exist but the client secret is gone', () => {
     saveAccount({ channelId: 'UC-abc', channelTitle: 'Nic', tokens: TOKENS });
     const err = (() => {

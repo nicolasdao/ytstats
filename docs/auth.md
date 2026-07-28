@@ -35,18 +35,21 @@ There is no code path that writes to a channel.
 
 ## Credential resolution
 
-`resolveCredentials()` returns `{ clientId, clientSecret, source }`, checking four sources in order and taking the first that yields a complete pair:
+`resolveCredentials()` returns `{ clientId, clientSecret, source }`, checking five sources in order and taking the first that yields a complete pair:
 
 | Order | Source | `source` value |
 |---|---|---|
 | 1 | `--client-secret <file>` | the path given |
 | 2 | `YTSTATS_CLIENT_ID` **and** `YTSTATS_CLIENT_SECRET` (both required) | `environment` |
-| 3 | `credentials.json` saved by a previous `ytstats login` | `stored` |
-| 4 | `client_secret*.json` auto-discovered in the working directory | the discovered path |
+| 3 | `YTSTATS_CREDENTIALS_FILE` — a path to the JSON Google issued | the path given |
+| 4 | `credentials.json` saved by a previous `ytstats login` | `stored` |
+| 5 | `client_secret*.json` auto-discovered in the working directory | the discovered path |
+
+The env pair is checked before the env path deliberately: adding the path form must not change resolution for anyone already exporting the pair.
 
 If none match, it throws `AUTH_NO_CREDENTIALS` with a `detail` naming everything it searched.
 
-`source` is for display only and never contains the secret — it is what `ytstats status` reports as `credentialSource` and what `login` prints to stderr.
+`source` is for display only and never contains the secret — it is what `ytstats status` reports as `credentialSource` and what `login` prints to stderr. `status` also reports the resolved `clientId`, which `source` alone cannot tell you once five sources can supply one; a client ID is public by OAuth design, so printing it is safe.
 
 ### File shapes accepted
 
@@ -110,6 +113,7 @@ Tokens live in `tokens.json` inside the per-user config directory (see [configur
       "channelId": "UC...",
       "channelTitle": "…",
       "customUrl": "@…",
+      "clientId": "123456789012-abc.apps.googleusercontent.com",
       "tokens": { "access_token": "…", "refresh_token": "…", "expiry_date": 0 },
       "savedAt": "2026-07-27T10:00:00.000Z"
     }
@@ -119,7 +123,17 @@ Tokens live in `tokens.json` inside the per-user config directory (see [configur
 
 Keyed by channel, so one machine can hold several. The first account logged in wins `default`; `ytstats use` changes it.
 
-**Saving merges rather than replaces.** A refresh response from Google contains a new `access_token` but no `refresh_token`, so `saveAccount()` spreads the existing tokens under the new ones. Overwriting would destroy the long-lived credential.
+**Saving merges rather than replaces.** A refresh response from Google contains a new `access_token` but no `refresh_token`, so `saveAccount()` spreads the existing tokens under the new ones. Overwriting would destroy the long-lived credential. `clientId` falls back the same way, because the refresh write-back path calls `saveAccount()` without one.
+
+### The client binding
+
+`clientId` records which OAuth client issued this account's refresh token. Google binds a refresh token to the client that issued it, so the pairing matters — but `credentials.json` holds one client for the whole config directory while `tokens.json` holds many channels, and the two can drift apart when a second `login` with a different `client_secret` overwrites the stored client.
+
+`getAuthenticatedClient()` compares the two after loading the account and throws `AUTH_CLIENT_MISMATCH` when they disagree. Without that check the run proceeds to a refresh Google rejects as `invalid_grant`, which maps to `AUTH_TOKEN_EXPIRED` and blames the consent screen — an accurate-sounding diagnosis of the wrong problem.
+
+The check is skipped when `account.clientId` is absent, so accounts stored before the field existed keep working: an unknown binding is not a mismatch. The field is not a secret and is never used to authenticate; `listAccounts()` includes it, and `ytstats status` prints it per account.
+
+To hold several clients on one machine, give each its own `YTSTATS_CONFIG_DIR` — see [configuration.md](configuration.md#running-several-oauth-clients-side-by-side).
 
 ### Refresh persistence
 
@@ -156,6 +170,7 @@ An unrecognised selector returns `null` — never a silent fallback to the defau
 | No OAuth client anywhere | `AUTH_NO_CREDENTIALS` |
 | Client exists, never logged in | `AUTH_NO_TOKENS` |
 | `--account` names an unknown channel | `AUTH_ACCOUNT_UNKNOWN` |
+| Stored token was issued by a different OAuth client | `AUTH_CLIENT_MISMATCH` |
 | Refresh token rejected (`invalid_grant`) | `AUTH_TOKEN_EXPIRED` |
 | Access explicitly revoked | `AUTH_TOKEN_REVOKED` |
 | Consent screen dismissed | `AUTH_CONSENT_DECLINED` |

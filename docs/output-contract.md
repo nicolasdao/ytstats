@@ -115,11 +115,12 @@ ytstats fetch 2>/dev/null | jq -r 'if .ok then "fine" else .nextSteps[0] end'
 
 | Code | Recoverable | Retryable | Meaning |
 |---|---|---|---|
-| `AUTH_NO_CREDENTIALS` | yes | no | No OAuth client found in any of the four sources |
+| `AUTH_NO_CREDENTIALS` | yes | no | No OAuth client found in any of the five sources |
 | `AUTH_NO_TOKENS` | yes | no | Client exists, but no channel has been authorized here |
 | `AUTH_TOKEN_EXPIRED` | yes | no | Refresh token rejected (`invalid_grant`) — usually the 7-day Testing trap |
 | `AUTH_TOKEN_REVOKED` | yes | no | Access explicitly revoked, by logout elsewhere or in Google account settings |
 | `AUTH_ACCOUNT_UNKNOWN` | yes | no | `--account` matched no signed-in channel |
+| `AUTH_CLIENT_MISMATCH` | yes | no | The channel's stored token was issued by a different OAuth client than the one resolved |
 | `AUTH_CONSENT_DECLINED` | yes | **yes** | Google returned `access_denied` — consent dismissed or a scope refused |
 | `AUTH_TIMEOUT` | yes | no | Callback never arrived; usually "Access blocked" in the browser |
 | `AUTH_CLIENT_ID_INVALID` | yes | no | Client ID does not end in `.apps.googleusercontent.com` |

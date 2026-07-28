@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-316 tests across 13 files. **None of them requires network access**, and none opens a browser.
+332 tests across 13 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 
@@ -32,14 +32,14 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 
 | File | Tests | Covers |
 |---|---|---|
-| `test/envelope.test.js` | 96 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
+| `test/envelope.test.js` | 98 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
 | `test/api/transforms.test.js` | 33 | Duration parsing, content classification, CSV, date normalization, row zipping |
 | `test/cli.e2e.test.js` | 30 | The real binary, spawned as a subprocess |
 | `test/api/fetchers.test.js` | 27 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher |
-| `test/auth/credentials.test.js` | 20 | Resolution precedence, file shapes, service-account rejection, discovery |
+| `test/auth/credentials.test.js` | 25 | Resolution precedence across all five sources, file shapes, service-account rejection, discovery |
+| `test/auth/tokens.test.js` | 23 | Multi-account store, merging, the client binding, default promotion, legacy import |
+| `test/auth/session.test.js` | 22 | `login`, `logout`, `getAuthenticatedClient`, refresh persistence, client-mismatch detection |
 | `test/auth/oauth.test.js` | 18 | PKCE, auth URL construction, and the loopback server over real HTTP |
-| `test/auth/session.test.js` | 18 | `login`, `logout`, `getAuthenticatedClient`, refresh persistence |
-| `test/auth/tokens.test.js` | 18 | Multi-account store, merging, default promotion, legacy import |
 | `test/config/store.test.js` | 14 | Atomic writes, permissions, traversal rejection |
 | `test/fetch-all.test.js` | 13 | Orchestration, per-step degradation, fatal codes, retention capping |
 | `test/dates.test.js` | 11 | Window resolution, calendar validation, bounds |

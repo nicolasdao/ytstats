@@ -106,7 +106,13 @@ Both the OAuth client and your tokens are written to a per-user directory, `0600
 | Linux | `$XDG_CONFIG_HOME/ytstats/` (default `~/.config/ytstats/`) |
 | Windows | `%APPDATA%\ytstats\` |
 
-Override with `YTSTATS_CONFIG_DIR`. For CI, set `YTSTATS_CLIENT_ID` and `YTSTATS_CLIENT_SECRET` instead of a file. These are plaintext files, like `gcloud`, `gh`, and `aws` use. `ytstats logout` revokes the token with Google and deletes them.
+Override with `YTSTATS_CONFIG_DIR`. For CI, point `YTSTATS_CREDENTIALS_FILE` at the JSON Google issued, or set `YTSTATS_CLIENT_ID` and `YTSTATS_CLIENT_SECRET` where the secret arrives as two variables. These are plaintext files, like `gcloud`, `gh`, and `aws` use. `ytstats logout` revokes the token with Google and deletes them.
+
+One config directory holds one OAuth client and any number of channels. To manage channels that live under *different* Google Cloud projects, give each its own directory — `YTSTATS_CONFIG_DIR` moves credentials and tokens together:
+
+```bash
+alias yt-acme='YTSTATS_CONFIG_DIR=~/.ytstats/acme ytstats'
+```
 
 ## Commands
 
@@ -227,7 +233,7 @@ src/
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                316 tests, none requiring network access
+test/                332 tests, none requiring network access
 docs/                topic documentation, indexed below
 ```
 

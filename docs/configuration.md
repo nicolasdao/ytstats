@@ -17,6 +17,7 @@ source:
 | `YTSTATS_CONFIG_DIR` | `resolveConfigDir()` | Overrides the config directory entirely. Relative values are resolved to absolute against the working directory |
 | `YTSTATS_CLIENT_ID` | `resolveCredentials()` | OAuth client id. **Both** this and the secret must be set for the pair to be used |
 | `YTSTATS_CLIENT_SECRET` | `resolveCredentials()` | OAuth client secret |
+| `YTSTATS_CREDENTIALS_FILE` | `resolveCredentials()` | Path to the `client_secret` JSON Google issued. Same effect as `--client-secret`, without repeating the flag |
 | `XDG_CONFIG_HOME` | `resolveConfigDir()` | Linux/BSD config base. **Ignored when relative**, per the XDG spec |
 | `APPDATA` | `resolveConfigDir()` | Windows config base; falls back to `%USERPROFILE%\AppData\Roaming` |
 | `HTTPS_PROXY` | `googleapis` / Node | Standard proxy variable, named in the `NETWORK_UNREACHABLE` remediation |
@@ -70,12 +71,15 @@ The multi-account token store, keyed by channel id:
       "channelId": "UC…",
       "channelTitle": "…",
       "customUrl": "@…",
+      "clientId": "123456789012-abc.apps.googleusercontent.com",
       "tokens": { "access_token": "…", "refresh_token": "…", "expiry_date": 0 },
       "savedAt": "2026-07-27T10:00:00.000Z"
     }
   }
 }
 ```
+
+`clientId` records which OAuth client issued this account's refresh token. It is not a secret and is never used to authenticate — it exists so a later run can tell whether the credentials it resolved are the ones the token belongs to. Accounts written before the field existed have `null` and are treated as unknown, not as a mismatch.
 
 Deleted entirely when the last account is removed. See [auth.md](auth.md#token-storage) for how it is read and merged.
 
@@ -94,16 +98,24 @@ These are plaintext files, the same approach `gcloud`, `gh`, and `aws` take. `yt
 
 ## CI and headless machines
 
-Supply the OAuth client through the environment instead of a file:
+Point at a mounted secret file:
 
 ```bash
-export YTSTATS_CLIENT_ID=123456789012-abc.apps.googleusercontent.com
-export YTSTATS_CLIENT_SECRET=GOCSPX-…
+export YTSTATS_CREDENTIALS_FILE=/run/secrets/ytstats-client.json
 export YTSTATS_CONFIG_DIR=$PWD/.ytstats     # if $HOME is not writable
 ytstats login --no-browser
 ```
 
-Both `YTSTATS_CLIENT_ID` and `YTSTATS_CLIENT_SECRET` must be set — one alone is ignored and resolution falls through to the next source.
+This is usually the cleanest option in CI, where the runner already mounts secrets as files: it takes the JSON Google issued as-is, with no step that extracts two fields out of it, and a path in the environment leaks less than a secret in the environment.
+
+The pair still works where the secret arrives as two variables:
+
+```bash
+export YTSTATS_CLIENT_ID=123456789012-abc.apps.googleusercontent.com
+export YTSTATS_CLIENT_SECRET=GOCSPX-…
+```
+
+Both must be set — one alone is ignored and resolution falls through to the next source.
 
 `--no-browser` prints the authorization URL and reads the pasted redirect back, so a machine with no browser can still complete the flow. The refresh token it produces is then reusable, provided the consent screen is published to Production — in Testing mode Google expires it after 7 days.
 
@@ -115,10 +127,34 @@ Ordered in `resolveCredentials()`; the first complete pair wins:
 
 1. `--client-secret <file>`
 2. `YTSTATS_CLIENT_ID` + `YTSTATS_CLIENT_SECRET` (both required)
-3. Stored `credentials.json`
-4. `client_secret*.json` auto-discovered in the working directory
+3. `YTSTATS_CREDENTIALS_FILE`
+4. Stored `credentials.json`
+5. `client_secret*.json` auto-discovered in the working directory
+
+The env pair is checked before the env path so that the path form changes nothing for anyone already exporting the pair. If both are set, the pair wins and `ytstats status` reports `credentialSource: environment` — which is how you catch a stale `YTSTATS_CLIENT_ID` shadowing the file you meant to use.
 
 Auto-discovery prefers an exact `client_secret.json`, otherwise takes the alphabetically first match so the same directory always resolves the same way. Full detail in [auth.md](auth.md#credential-resolution).
+
+## Running several OAuth clients side by side
+
+One config directory holds **one** OAuth client — `credentials.json` is a single record, not one per channel. `tokens.json` holds many channels, so the two only stay consistent if every channel in a directory was authorized with the same client.
+
+That is fine for the common case (one Google Cloud project, several of your own channels). It breaks when channels live under *different* projects — managing a client's channel with a client-issued OAuth client, for instance. Give each client its own directory:
+
+```bash
+alias yt-acme='YTSTATS_CONFIG_DIR=~/.ytstats/acme YTSTATS_CREDENTIALS_FILE=~/secrets/acme.json ytstats'
+alias yt-mine='YTSTATS_CONFIG_DIR=~/.ytstats/mine ytstats'
+```
+
+`YTSTATS_CONFIG_DIR` is what does the real work: it moves the credentials *and* the tokens together, so the two halves cannot drift apart. Setting only `YTSTATS_CREDENTIALS_FILE` while leaving the config directory shared pairs one client's id with another's tokens, which is exactly the state [`AUTH_CLIENT_MISMATCH`](output-contract.md#diagnostic-catalog) exists to catch.
+
+Per-directory rather than per-shell, with [direnv](https://direnv.net/):
+
+```bash
+# .envrc
+export YTSTATS_CONFIG_DIR="$PWD/.ytstats"
+export YTSTATS_CREDENTIALS_FILE="$HOME/secrets/acme.json"
+```
 
 ## Not committing credentials
 

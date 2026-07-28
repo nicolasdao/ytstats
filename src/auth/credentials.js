@@ -32,12 +32,12 @@ export function parseClientSecret(raw) {
   return { clientId, clientSecret };
 }
 
-function readClientSecretFile(file) {
+function readClientSecretFile(file, flag = '--client-secret') {
   let raw;
   try {
     raw = fs.readFileSync(file, 'utf-8');
   } catch {
-    throw fail(DIAGNOSTICS.AUTH_CREDENTIALS_NOT_FOUND, { value: file, flag: '--client-secret' });
+    throw fail(DIAGNOSTICS.AUTH_CREDENTIALS_NOT_FOUND, { value: file, flag });
   }
 
   let parsed;
@@ -137,8 +137,12 @@ export function clearCredentials() {
  * Precedence:
  *   1. --client-secret <file>
  *   2. YTSTATS_CLIENT_ID + YTSTATS_CLIENT_SECRET (both required)
- *   3. credentials.json saved by a previous `ytstats login`
- *   4. client_secret*.json auto-discovered in the working directory
+ *   3. YTSTATS_CREDENTIALS_FILE — a path to the JSON Google issued
+ *   4. credentials.json saved by a previous `ytstats login`
+ *   5. client_secret*.json auto-discovered in the working directory
+ *
+ * The env-var pair is checked before the env-var path so that adding the path
+ * form changes nothing for anyone already exporting the pair.
  *
  * Returns { clientId, clientSecret, source }. `source` is for display only and
  * never contains the secret.
@@ -156,6 +160,15 @@ export function resolveCredentials({ clientSecretPath, env = process.env, cwd = 
     };
   }
 
+  // A path in the environment leaks less than a secret in the environment, and
+  // it points straight at the file Google hands out — no extracting two fields.
+  if (env.YTSTATS_CREDENTIALS_FILE) {
+    return {
+      ...readClientSecretFile(env.YTSTATS_CREDENTIALS_FILE, 'YTSTATS_CREDENTIALS_FILE'),
+      source: env.YTSTATS_CREDENTIALS_FILE,
+    };
+  }
+
   const stored = loadStoredCredentials();
   if (stored) {
     return { clientId: stored.clientId, clientSecret: stored.clientSecret, source: 'stored' };
@@ -167,6 +180,8 @@ export function resolveCredentials({ clientSecretPath, env = process.env, cwd = 
   }
 
   throw fail(DIAGNOSTICS.AUTH_NO_CREDENTIALS, {
-    detail: `Searched: --client-secret, YTSTATS_CLIENT_ID/SECRET env vars, stored credentials, and client_secret*.json in ${cwd}`,
+    detail:
+      'Searched: --client-secret, YTSTATS_CLIENT_ID/SECRET env vars, YTSTATS_CREDENTIALS_FILE, ' +
+      `stored credentials, and client_secret*.json in ${cwd}`,
   });
 }

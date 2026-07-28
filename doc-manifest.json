@@ -37,7 +37,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 256,
+      "line_count": 262,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -121,13 +121,14 @@
         "Timeout",
         "The --no-browser flow",
         "Token storage",
+        "The client binding",
         "Refresh persistence",
         "Account selection",
         "Failure diagnosis order",
         "Logout",
         "Legacy import"
       ],
-      "line_count": 186,
+      "line_count": 201,
       "links_to": [
         "README.md",
         "docs/configuration.md",
@@ -180,7 +181,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 285,
+      "line_count": 294,
       "links_to": [
         "docs/architecture.md",
         "docs/configuration.md",
@@ -222,12 +223,14 @@
         "Permissions and write discipline",
         "CI and headless machines",
         "Credential resolution order",
+        "Running several OAuth clients side by side",
         "Not committing credentials"
       ],
-      "line_count": 127,
+      "line_count": 163,
       "links_to": [
         "docs/auth.md",
-        "docs/gotchas/config-storage.md"
+        "docs/gotchas/config-storage.md",
+        "docs/output-contract.md"
       ],
       "over_size": false,
       "parse_error": null,
@@ -341,13 +344,16 @@
         "Channel identity is fetched before anything is persisted",
         "Credentials are diagnosed before tokens",
         "An unknown --account never falls back to the default",
+        "One config directory holds one OAuth client, but many channels",
+        "An absent client binding is unknown, not a mismatch",
+        "The account selector is checked before the client binding",
         "The loopback server binds 127.0.0.1, never 0.0.0.0",
         "The favicon request is not the callback",
         "--no-browser uses a deliberately dead redirect URI",
         "Logout removes local tokens even when revocation fails",
         "A read-only config dir must not break a working command"
       ],
-      "line_count": 121,
+      "line_count": 145,
       "links_to": [
         "docs/auth.md",
         "docs/gotchas/config-storage.md"
@@ -536,7 +542,7 @@
         "Redaction",
         "Failures are differentiated"
       ],
-      "line_count": 214,
+      "line_count": 215,
       "links_to": [
         "docs/gotchas/cli-output.md"
       ],

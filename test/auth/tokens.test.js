@@ -77,6 +77,42 @@ describe('token store', () => {
     expect(loadAccount('UC-ghost')).toBeNull();
   });
 
+  describe('client binding', () => {
+    it('records which OAuth client issued the token', () => {
+      saveAccount({ channelId: 'UC1', clientId: 'client-A', tokens: TOKENS_A });
+      expect(loadAccount('UC1').clientId).toBe('client-A');
+    });
+
+    it('preserves the binding when a token refresh writes back without one', () => {
+      // The client.on('tokens') handler fires with a partial payload. Dropping
+      // the clientId there would silently disarm mismatch detection after the
+      // first refresh — exactly when it is still needed.
+      saveAccount({ channelId: 'UC1', clientId: 'client-A', tokens: TOKENS_A });
+      saveAccount({ channelId: 'UC1', tokens: { access_token: 'ya29.rotated' } });
+
+      const acct = loadAccount('UC1');
+      expect(acct.clientId).toBe('client-A');
+      expect(acct.tokens.refresh_token).toBe('1//refresh-a');
+    });
+
+    it('re-login with a different client updates the binding', () => {
+      saveAccount({ channelId: 'UC1', clientId: 'client-A', tokens: TOKENS_A });
+      saveAccount({ channelId: 'UC1', clientId: 'client-B', tokens: TOKENS_B });
+      expect(loadAccount('UC1').clientId).toBe('client-B');
+    });
+
+    it('reads null for an account stored before the field existed', () => {
+      saveAccount({ channelId: 'UC1', tokens: TOKENS_A });
+      expect(loadAccount('UC1').clientId).toBeNull();
+      expect(listAccounts()[0].clientId).toBeNull();
+    });
+
+    it('exposes the client id in listAccounts — it is not a secret', () => {
+      saveAccount({ channelId: 'UC1', clientId: 'client-A', tokens: TOKENS_A });
+      expect(listAccounts()[0].clientId).toBe('client-A');
+    });
+  });
+
   describe('removal', () => {
     it('removes an account and reports it', () => {
       saveAccount({ channelId: 'UC1', channelTitle: 'One', tokens: TOKENS_A });

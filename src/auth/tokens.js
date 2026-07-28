@@ -8,11 +8,16 @@ import { YtStatsError, ERROR_CODES } from '../errors.js';
  * {
  *   version: 1,
  *   default: "UC...",
- *   accounts: { "UC...": { channelId, channelTitle, customUrl, tokens, savedAt } }
+ *   accounts: { "UC...": { channelId, channelTitle, customUrl, clientId, tokens, savedAt } }
  * }
  *
  * Keyed by channel so one machine can hold several channels; `default` is what
  * commands use when --account is not given.
+ *
+ * `clientId` records which OAuth client issued this account's refresh token. It
+ * is not a secret, and it is not used to authenticate — it exists so that a
+ * later run can tell whether the credentials it resolved are the ones the token
+ * actually belongs to. Absent on accounts saved before this field existed.
  */
 function emptyStore() {
   return { version: 1, default: null, accounts: {} };
@@ -30,7 +35,7 @@ function write(store) {
 }
 
 /** Persist (or update) one channel's tokens. First account logged in wins the default. */
-export function saveAccount({ channelId, channelTitle, customUrl, tokens }) {
+export function saveAccount({ channelId, channelTitle, customUrl, clientId, tokens }) {
   if (!channelId) {
     throw new YtStatsError('Cannot save credentials without a channel id.', {
       code: ERROR_CODES.AUTH_FAILED,
@@ -44,6 +49,9 @@ export function saveAccount({ channelId, channelTitle, customUrl, tokens }) {
     channelId,
     channelTitle: channelTitle ?? existing?.channelTitle ?? null,
     customUrl: customUrl ?? existing?.customUrl ?? null,
+    // Falls back like the fields above: the refresh-token write-back path calls
+    // this without a clientId, and must not erase the binding recorded at login.
+    clientId: clientId ?? existing?.clientId ?? null,
     // A refresh happens without a new refresh_token; keep the one we already hold.
     tokens: { ...(existing?.tokens ?? {}), ...tokens },
     savedAt: new Date().toISOString(),
@@ -75,13 +83,14 @@ export function loadAccount(selector) {
   return match ?? null;
 }
 
-/** Accounts without token material — safe to print. */
+/** Accounts without token material — safe to print. A client ID is not a secret. */
 export function listAccounts() {
   const store = read();
   return Object.values(store.accounts).map(a => ({
     channelId: a.channelId,
     channelTitle: a.channelTitle,
     customUrl: a.customUrl,
+    clientId: a.clientId ?? null,
     savedAt: a.savedAt,
     isDefault: a.channelId === store.default,
   }));

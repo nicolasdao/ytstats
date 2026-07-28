@@ -76,7 +76,7 @@ Runs the loopback OAuth flow: opens the browser, captures the callback on `127.0
 | `--no-browser` | off | Print the URL and read the pasted redirect back — for SSH and headless machines |
 | `--timeout <seconds>` | `300` | How long to wait for the browser callback, so an automated caller is never blocked indefinitely |
 
-Credentials are resolved in this order: `--client-secret` → `YTSTATS_CLIENT_ID`/`YTSTATS_CLIENT_SECRET` → stored `credentials.json` → `client_secret*.json` in the working directory. See [configuration.md](configuration.md).
+Credentials are resolved in this order: `--client-secret` → `YTSTATS_CLIENT_ID`/`YTSTATS_CLIENT_SECRET` → `YTSTATS_CREDENTIALS_FILE` → stored `credentials.json` → `client_secret*.json` in the working directory. See [configuration.md](configuration.md).
 
 Returns `{ channelId, channelTitle, customUrl, configDir }`.
 
@@ -106,9 +106,18 @@ Local removal happens even when revocation fails — being offline should not le
 ytstats status
 ```
 
-Reports who is signed in and where configuration lives. Takes no flags and needs no authentication.
+Reports who is signed in and where configuration lives. Takes no flags and needs no authentication. This is the "who am I" command.
 
-Returns `{ authenticated, configDir, credentialSource, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `savedAt`, and `isDefault` — never token material. `setupGuide` appears only when no account is signed in.
+Returns `{ authenticated, configDir, credentialSource, clientId, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, and `isDefault` — never token material. `setupGuide` appears only when no account is signed in.
+
+`credentialSource` says *where* the OAuth client came from (a path, `environment`, or `stored`); `clientId` says *which* client that turned out to be. Both are `null` when no credentials resolve. Client IDs are public by OAuth design — only the secret is sensitive — so neither field is redacted.
+
+Comparing the top-level `clientId` against an account's `clientId` tells you whether that channel's stored token was issued by the client currently resolving. A disagreement is what [`AUTH_CLIENT_MISMATCH`](output-contract.md#diagnostic-catalog) reports on the next authenticated command.
+
+```bash
+ytstats status 2>/dev/null | jq '{clientId, credentialSource}'
+ytstats status 2>/dev/null | jq -r '.data.accounts[] | select(.isDefault) | .channelTitle'
+```
 
 ### doctor
 

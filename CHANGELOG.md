@@ -6,6 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `YTSTATS_CREDENTIALS_FILE` — supply the OAuth client as a path to the JSON Google
+  issued, rather than as two extracted environment variables. Resolved after the
+  `YTSTATS_CLIENT_ID`/`YTSTATS_CLIENT_SECRET` pair and before stored credentials, so
+  existing setups are unaffected. Intended for CI, where secrets already arrive as
+  mounted files, and for per-directory configuration with direnv.
+- `ytstats status` now reports the resolved `clientId` alongside `credentialSource`,
+  and each account reports the `clientId` it was authorized with. A client ID is
+  public by OAuth design, so neither is redacted.
+- `AUTH_CLIENT_MISMATCH` — a new diagnostic raised when a channel's stored token was
+  issued by a different OAuth client than the one currently resolving. Previously this
+  reached Google as `invalid_grant` and surfaced as `AUTH_TOKEN_EXPIRED`, which blames
+  the consent screen and sends the caller to fix the wrong thing.
+- `tokens.json` accounts now record `clientId`, the client that issued the refresh
+  token. Accounts written before this field existed read as `null` and are treated as
+  unknown rather than mismatched, so upgrading logs nobody out.
+
+### Documentation
+
+- Documented running several OAuth clients side by side via one `YTSTATS_CONFIG_DIR`
+  per client, which moves credentials and tokens together.
+
 ## [0.1.0] - 2026-07-28
 
 Initial release.
