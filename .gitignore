@@ -3,6 +3,11 @@ coverage/
 *.log
 .DS_Store
 
+# Python bytecode. The bundled doc-manifest generator under .agents/skills/
+# compiles on every run; the artifacts are machine- and version-specific.
+__pycache__/
+*.pyc
+
 # Never commit OAuth material. ytstats stores credentials in a per-user config
 # directory, but a client_secret download could easily land here during testing.
 client_secret*.json
