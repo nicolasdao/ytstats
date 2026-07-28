@@ -18,6 +18,8 @@ ytstats [global flags] <command> [command flags]
 
 Installed globally, or run without installing via `npx ytstats <command>`.
 
+Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 22 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
+
 ## Global flags
 
 Global flags go **before** the command name.

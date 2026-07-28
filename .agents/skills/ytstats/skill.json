@@ -1,0 +1,52 @@
+{
+	"name": "ytstats",
+	"version": "0.1.0",
+	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 22 commands, the JSON envelope, and interpretation traps.",
+	"type": "skill",
+	"authors": ["Nicolas Dao <nicolas.dao@gmail.com>"],
+	"license": "BSD-3-Clause",
+	"repository": "https://github.com/nicolasdao/ytstats.git",
+	"dependencies": {},
+	"systemDependencies": {
+		"ytstats": {
+			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup.",
+			"version": ">=0.2.0",
+			"check": "npx --yes ytstats --version",
+			"install": {
+				"darwin": "npm install -g ytstats",
+				"linux": "npm install -g ytstats",
+				"win32": "npm install -g ytstats"
+			}
+		},
+		"node": {
+			"description": "Node.js 18 or newer. Required to run ytstats, which is pure JS with no native dependencies.",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "sudo apt-get install -y nodejs",
+				"win32": "winget install --id OpenJS.NodeJS -e"
+			}
+		},
+		"npx": {
+			"description": "Ships with npm. Used to run ytstats without a global install.",
+			"version": ">=8.0.0",
+			"check": "npx --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "sudo apt-get install -y npm",
+				"win32": "winget install --id OpenJS.NodeJS -e"
+			}
+		},
+		"jq": {
+			"description": "Used to extract fields from the JSON envelope without loading whole documents into the conversation.",
+			"version": ">=1.6",
+			"check": "jq --version",
+			"install": {
+				"darwin": "brew install jq",
+				"linux": "sudo apt-get install -y jq",
+				"win32": "winget install --id jqlang.jq -e"
+			}
+		}
+	}
+}

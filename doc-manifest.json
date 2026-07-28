@@ -30,6 +30,7 @@
         "Self-diagnosis",
         "Output",
         "Use as a library",
+        "Drive it from an AI agent",
         "Things worth knowing",
         "Quota",
         "Project Structure",
@@ -37,7 +38,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 262,
+      "line_count": 290,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -181,8 +182,9 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 294,
+      "line_count": 296,
       "links_to": [
+        "README.md",
         "docs/architecture.md",
         "docs/configuration.md",
         "docs/gotchas/youtube-api.md",

@@ -26,6 +26,7 @@ No install. No server. No shared API key. Your data and your credentials never l
   - [Self-diagnosis](#self-diagnosis)
 - [Output](#output)
 - [Use as a library](#use-as-a-library)
+- [Drive it from an AI agent](#drive-it-from-an-ai-agent)
 - [Things worth knowing](#things-worth-knowing)
 - [Quota](#quota)
 - [Project Structure](#project-structure)
@@ -198,6 +199,32 @@ const result = await fetchAll(createApis(client), { range: resolveDateRange({ da
 
 Library callers get no envelope: `fetchAll` returns its result object directly and fetchers throw `YtStatsError`. The full export surface is listed in [docs/architecture.md](docs/architecture.md#programmatic-api).
 
+## Drive it from an AI agent
+
+There is a published agent skill that operates **the entire CLI** — all 22 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
+
+```
+nicolasdao/ytstats@0.1.0        install with HappySkills
+```
+
+Ask for what you want and it picks the command, runs it, and answers the question:
+
+| You say | It runs |
+|---|---|
+| "pull all my channel stats" | `fetch --days 90` into a file, then summarizes |
+| "how's my CTR" | `reach` — and explains the 24-48h Reporting API lag if the job is new |
+| "where do viewers drop off on my last video" | `videos` to resolve the id, then `retention <videoId>` |
+| "log in" / "switch channel" | `login` / `use <channel>` |
+| "why doesn't this work" | `doctor` |
+
+It auto-invokes, so there is no slash command to remember. It also carries the parts of this README that are easy to get wrong when reading results — that `impressionsCtr` is a fraction rather than a percentage, that retention ratios above 1.0 mean rewatching, and that an empty dataset listed in `data.warnings` means the step degraded rather than the channel having no activity.
+
+Two behaviours are deliberate: it confirms before `logout`, because that revokes the refresh token with Google, and it redirects a large `fetch` to a file rather than printing megabytes of JSON.
+
+Requires `ytstats` **0.2.0 or newer** — it reads the `clientId` field on `status` and the `AUTH_CLIENT_MISMATCH` diagnostic, both added in 0.2.0.
+
+The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own `SKILL.md` and `references/` are its full documentation.
+
 ## Things worth knowing
 
 **CTR only comes from `ytstats reach`.** The Analytics API documents `videoThumbnailImpressions` but it has never worked ([issue 254665034](https://issuetracker.google.com/issues/254665034)). CTR is served asynchronously by the Reporting API instead: the first `reach` run only creates a job, and data appears **24-48 hours later** with a 30-day backfill. It's also permanently 1-2 days behind — the same lag YouTube Studio shows.
@@ -235,6 +262,7 @@ src/
   dates.js           reporting window resolution and validation
 test/                332 tests, none requiring network access
 docs/                topic documentation, indexed below
+.agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```
 
 ## Documentation
