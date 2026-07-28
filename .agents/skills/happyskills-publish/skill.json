@@ -1,0 +1,118 @@
+{
+	"name": "happyskills-publish",
+	"version": "0.6.2",
+	"requires": {
+		"happyskills": ">=0.49.0"
+	},
+	"type": "skill",
+	"description": "HappySkills publishing — atomic release pipeline (snapshot + validate + bump + changelog + publish), bump, validate, convert external skills, fork managed skills, delete, and change visibility.",
+	"authors": [
+		"Nicolas Dao <nic@happyskills.ai>"
+	],
+	"license": "BSD-3-Clause",
+	"keywords": [
+		"happyskills",
+		"publish",
+		"release",
+		"bump",
+		"validate",
+		"convert",
+		"fork",
+		"registry",
+		"ai"
+	],
+	"dependencies": {},
+	"capabilities": [
+		{
+			"id": "publish-and-release",
+			"summary": "publish or release a skill version to the registry",
+			"intents": [
+				"publish my skill",
+				"push my skill to the registry",
+				"release my skill",
+				"ship a new version of my skill",
+				"cut a release"
+			],
+			"commands": [
+				"publish",
+				"release"
+			]
+		},
+		{
+			"id": "version-and-validate",
+			"summary": "bump a skill's version and validate it before publishing",
+			"intents": [
+				"bump the version",
+				"increment my skill's version",
+				"validate my skill",
+				"lint my skill",
+				"check my skill for errors before publishing"
+			],
+			"commands": [
+				"bump",
+				"validate"
+			]
+		},
+		{
+			"id": "onboard-external-skill",
+			"summary": "bring a foreign or hand-rolled skill under management, or fork an existing one",
+			"intents": [
+				"convert a foreign skill to managed",
+				"register a hand-rolled skill I cloned from elsewhere",
+				"fork a skill into my workspace",
+				"make my own copy of an existing skill"
+			],
+			"commands": [
+				"convert",
+				"fork"
+			]
+		},
+		{
+			"id": "registry-lifecycle",
+			"summary": "remove a skill from the registry or change its visibility",
+			"intents": [
+				"delete my skill from the registry",
+				"unpublish a skill",
+				"make my skill public",
+				"make my skill private",
+				"change a skill's visibility"
+			],
+			"commands": [
+				"delete",
+				"visibility"
+			]
+		}
+	],
+	"systemDependencies": {
+		"node": {
+			"description": "Node.js runtime (for npx happyskills)",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "winget install OpenJS.NodeJS"
+			}
+		},
+		"npm": {
+			"description": "npm package manager (ships with Node.js, used to invoke npx happyskills)",
+			"version": ">=9.0.0",
+			"check": "npm --version",
+			"install": {
+				"darwin": "Ships with Node.js — install via brew install node",
+				"linux": "Ships with Node.js — install via nvm",
+				"win32": "Ships with Node.js — install via winget install OpenJS.NodeJS"
+			}
+		},
+		"git": {
+			"description": "Git version control (used by the release primitive to analyze changes via git diff/log)",
+			"version": ">=2.20.0",
+			"check": "git --version",
+			"install": {
+				"darwin": "brew install git",
+				"linux": "apt install git",
+				"win32": "winget install Git.Git"
+			}
+		}
+	}
+}

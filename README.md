@@ -253,4 +253,4 @@ Node.js 18+. No native dependencies.
 
 ## License
 
-MIT
+BSD-3-Clause

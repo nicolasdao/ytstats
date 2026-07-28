@@ -1,0 +1,8 @@
+{
+	"name": "reframe-last-answer",
+	"version": "0.1.0",
+	"description": "Recast your own previous detailed answer into a decision-first brief — verdict first, plain language, lossless on anything that changes a decision, lossy on process. Adaptive format, invoked on 'reframe your last answer'.",
+	"keywords": ["communication", "summarization", "decision-making", "executive-brief", "reframe", "analytics"],
+	"type": "skill",
+	"dependencies": {}
+}

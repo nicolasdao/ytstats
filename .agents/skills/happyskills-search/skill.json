@@ -1,0 +1,98 @@
+{
+	"name": "happyskills-search",
+	"version": "0.4.2",
+	"type": "skill",
+	"description": "HappySkills — Find, recommend, and star skills, browse versions and changelogs, and match a local folder of skills against the catalog. Use when searching for a skill, exploring what is available, starring favorites, picking a version, or checking which local skills exist in HappySkills. Not for installing.",
+	"authors": [
+		"Nicolas Dao <nic@happyskills.ai>"
+	],
+	"license": "BSD-3-Clause",
+	"keywords": [
+		"happyskills",
+		"search",
+		"discovery",
+		"recommend",
+		"find",
+		"explore",
+		"versions",
+		"changelog",
+		"favorites",
+		"star",
+		"rerank",
+		"ai"
+	],
+	"dependencies": {},
+	"capabilities": [
+		{
+			"id": "find-skills",
+			"summary": "search the registry and get project-aware skill recommendations",
+			"intents": [
+				"find a skill for a task",
+				"search the registry",
+				"recommend skills for my project",
+				"what skills exist for X",
+				"discover a skill to do Y",
+				"match a local folder of skills against the catalog",
+				"which of my local skills already exist in HappySkills"
+			],
+			"commands": [
+				"search",
+				"postlex",
+				"match"
+			]
+		},
+		{
+			"id": "browse-skill-history",
+			"summary": "browse a skill's published versions and changelog",
+			"intents": [
+				"list the versions of a skill",
+				"what versions of a skill exist",
+				"show a skill's version history",
+				"show a skill's changelog",
+				"what changed in a skill",
+				"read the release notes for a skill"
+			],
+			"commands": [
+				"versions",
+				"changelog"
+			]
+		},
+		{
+			"id": "manage-favorites",
+			"summary": "star and unstar skills to manage your favorites",
+			"intents": [
+				"star a skill",
+				"add a skill to my favorites",
+				"unstar a skill",
+				"remove a skill from my favorites",
+				"manage my favorite skills"
+			],
+			"commands": [
+				"star",
+				"unstar"
+			]
+		}
+	],
+	"systemDependencies": {
+		"node": {
+			"description": "Node.js runtime (for npx happyskills)",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "winget install OpenJS.NodeJS"
+			}
+		},
+		"npm": {
+			"description": "npm package manager (ships with Node.js, used to invoke npx happyskills)",
+			"version": ">=9.0.0",
+			"check": "npm --version",
+			"install": {
+				"darwin": "Ships with Node.js — install via brew install node",
+				"linux": "Ships with Node.js — install via nvm",
+				"win32": "Ships with Node.js — install via winget install OpenJS.NodeJS"
+			}
+		}
+	}
+}

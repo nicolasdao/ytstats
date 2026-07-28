@@ -1,0 +1,17 @@
+# Changelog
+
+All notable changes to the Essentials kit are documented here.
+
+## [0.2.0] - 2026-07-26
+
+### Added
+- `nicolasdao/session-status` — a manually-invoked session ledger. It answers the question a long-running session leaves ambiguous: has the work finished, is it waiting on something, or did it stop halfway? The output is one screen — a plain-English verdict, a single table separating what came from the original plan from what was added along the way, and a short list of what only the user can unblock.
+- It earns a place among the essentials for the same reason the others do: it is cross-cutting and domain-independent. Any project worked on across more than one sitting has the problem it solves.
+- Version strategy unchanged — always-latest (`*`), consistent with every other member.
+
+## [0.1.0] - 2026-07-03
+
+### Added
+- Initial release of the Essentials kit.
+- Bundles `nicolasdao/_kit-doc-essentials` (nested kit: project memory, specifications, git commits), `nicolasdao/reframe-last-answer`, and `nicolasdao/scrutinize`.
+- Version strategy: always-latest (`*`) for every member.

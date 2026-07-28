@@ -1,0 +1,86 @@
+{
+	"name": "happyskills-help",
+	"version": "0.9.0",
+	"type": "skill",
+	"description": "HappySkills concierge — explain how HappySkills works, list and install its optional opt-in skills, route any request to the right family skill, sign in, and send feedback. Hands off skill discovery, versions, and changelogs to happyskills-search.",
+	"authors": [
+		"Nicolas Dao <nic@happyskills.ai>"
+	],
+	"license": "BSD-3-Clause",
+	"keywords": [
+		"happyskills",
+		"help",
+		"concierge",
+		"explain",
+		"route",
+		"login",
+		"authenticate",
+		"feedback",
+		"bug-report",
+		"feature-request",
+		"documentation",
+		"ai"
+	],
+	"dependencies": {},
+	"capabilities": [
+		{
+			"id": "explain-happyskills",
+			"summary": "explain what HappySkills is and how it works (no CLI command; answered by the concierge)",
+			"intents": [
+				"what is HappySkills",
+				"how does HappySkills work",
+				"how does merge resolution work",
+				"which agents are supported",
+				"explain a HappySkills concept"
+			],
+			"commands": []
+		},
+		{
+			"id": "route-to-skill",
+			"summary": "route a request to the family skill that handles it (no CLI command; the concierge's catch-all)",
+			"intents": [
+				"which skill handles this",
+				"who do I ask to do X in HappySkills",
+				"route me to the right HappySkills skill",
+				"what can HappySkills do"
+			],
+			"commands": []
+		},
+		{
+			"id": "lodge-feedback",
+			"summary": "report a bug, request a feature, or send a compliment about HappySkills",
+			"intents": [
+				"report a bug in HappySkills",
+				"request a feature",
+				"I wish HappySkills could do X",
+				"send a compliment to the team",
+				"give feedback about HappySkills"
+			],
+			"commands": [
+				"feedback"
+			]
+		}
+	],
+	"systemDependencies": {
+		"node": {
+			"description": "Node.js runtime (for npx happyskills)",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "winget install OpenJS.NodeJS"
+			}
+		},
+		"npm": {
+			"description": "npm package manager (ships with Node.js, used to invoke npx happyskills)",
+			"version": ">=9.0.0",
+			"check": "npm --version",
+			"install": {
+				"darwin": "Ships with Node.js — install via brew install node",
+				"linux": "Ships with Node.js — install via nvm",
+				"win32": "Ships with Node.js — install via winget install OpenJS.NodeJS"
+			}
+		}
+	}
+}

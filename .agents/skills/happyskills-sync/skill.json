@@ -1,0 +1,91 @@
+{
+	"name": "happyskills-sync",
+	"version": "0.6.4",
+	"requires": {
+		"happyskills": ">=1.13.0"
+	},
+	"type": "skill",
+	"description": "Sync local skills with the remote registry — status, pull (with rebase-style mode), diff, reconcile drift, merge-conflict resolution, and publish-after-merge intelligence.",
+	"authors": [
+		"Nicolas Dao <nic@happyskills.ai>"
+	],
+	"license": "BSD-3-Clause",
+	"keywords": [
+		"happyskills",
+		"sync",
+		"merge",
+		"pull",
+		"diff",
+		"conflict-resolution",
+		"three-way-merge",
+		"ai"
+	],
+	"dependencies": {},
+	"capabilities": [
+		{
+			"id": "check-divergence",
+			"summary": "check whether a local skill has diverged from the registry and see the differences",
+			"intents": [
+				"check my skill's status",
+				"is my skill modified",
+				"has my skill diverged from the registry",
+				"why can't I publish, it says diverged",
+				"show the difference between my local skill and the remote",
+				"what changed locally versus the registry"
+			],
+			"commands": [
+				"status",
+				"diff"
+			]
+		},
+		{
+			"id": "pull-and-merge",
+			"summary": "pull remote changes and resolve merge conflicts",
+			"intents": [
+				"pull remote changes",
+				"sync my skill with the registry",
+				"get the latest version of a skill I authored",
+				"resolve merge conflicts",
+				"fix conflict markers after a pull"
+			],
+			"commands": [
+				"pull"
+			]
+		},
+		{
+			"id": "repair-drift",
+			"summary": "repair lock-versus-disk drift after an out-of-band change",
+			"intents": [
+				"reconcile drift",
+				"repair a lock versus disk mismatch",
+				"fix a skill the CLI says has drifted",
+				"restore consistency between the lock file and disk"
+			],
+			"commands": [
+				"reconcile"
+			]
+		}
+	],
+	"systemDependencies": {
+		"node": {
+			"description": "Node.js runtime (for npx happyskills)",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "winget install OpenJS.NodeJS"
+			}
+		},
+		"npm": {
+			"description": "npm package manager (ships with Node.js, used to invoke npx happyskills)",
+			"version": ">=9.0.0",
+			"check": "npm --version",
+			"install": {
+				"darwin": "Ships with Node.js — install via brew install node",
+				"linux": "Ships with Node.js — install via nvm",
+				"win32": "Ships with Node.js — install via winget install OpenJS.NodeJS"
+			}
+		}
+	}
+}

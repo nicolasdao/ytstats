@@ -1,0 +1,22 @@
+# Essentials
+
+This is a kit — a curated collection of skills installed together in one command.
+
+The most essential skills to manage any project, regardless of what the project is for. Every project needs to manage its memory, write a specification, and be version-controlled — and may need help reframing the last answer, verifying the work being done, and re-orienting after stepping away. These are the essential skills and kits every project needs.
+
+## What's Included
+
+- **Doc Essentials** (`nicolasdao/_kit-doc-essentials`) — a nested kit that gives a project perpetual, agent-readable memory (the Project Memory constellation), the ability to write specifications, and clean conventional git commits. This covers three of the essentials on its own: memory, specification, and version control.
+- **Reframe Last Answer** (`nicolasdao/reframe-last-answer`) — recast a previous detailed answer into a decision-first brief, for when a project needs its last answer reframed.
+- **Scrutinize** (`nicolasdao/scrutinize`) — self-review and fix your own just-finished work in the same session, for when a project needs the work being done verified.
+- **Session Status** (`nicolasdao/session-status`) — a manually-invoked ledger showing what is done, what is left, what is waiting and why, and what only you can unblock, for when you return to a session and cannot remember where things stand.
+
+## When to Use
+
+Install this kit at the start of any project — the domain doesn't matter. It bundles the cross-cutting capabilities every project needs: managing memory, writing specs, version control, reframing answers, verifying work, and knowing where a long-running session actually stands.
+
+## Install
+
+```bash
+npx happyskills install nicolasdao/_kit-essentials
+```

@@ -1,0 +1,38 @@
+{
+	"name": "_kit-essentials",
+	"version": "0.2.0",
+	"description": "Essential skills for any project — memory, specs, version control, reframed answers, verified work, and session state. Bundles Doc Essentials, Reframe Last Answer, Scrutinize and Session Status.",
+	"keywords": [
+		"essentials",
+		"kit",
+		"project-management",
+		"project-memory",
+		"memory",
+		"specification",
+		"spec",
+		"version-control",
+		"git",
+		"commit",
+		"reframe",
+		"scrutinize",
+		"review",
+		"verification",
+		"session-status",
+		"status",
+		"ledger",
+		"handover",
+		"claude-code",
+		"cursor"
+	],
+	"type": "kit",
+	"authors": [
+		"Nicolas Dao (nicolas.dao@gmail.com)"
+	],
+	"license": "BSD-3-Clause",
+	"dependencies": {
+		"nicolasdao/_kit-doc-essentials": "*",
+		"nicolasdao/reframe-last-answer": "*",
+		"nicolasdao/scrutinize": "*",
+		"nicolasdao/session-status": "*"
+	}
+}
