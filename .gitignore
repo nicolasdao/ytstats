@@ -14,3 +14,7 @@ client_secret*.json
 credentials.json
 tokens.json
 .env
+
+# HappySkills publish snapshots. Transient per-publish copies of skill
+# directories under .agents/skills/ — regenerated on every release.
+.happyskills/
