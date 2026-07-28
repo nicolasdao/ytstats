@@ -9,7 +9,38 @@ npx ytstats fetch --days 90 > snapshot.json
 
 No install. No server. No shared API key. Your data and your credentials never leave your machine.
 
-## Why bring your own credentials
+## Table of Contents
+
+<!-- BEGIN toc -->
+- [Overview](#overview)
+  - [Why bring your own credentials](#why-bring-your-own-credentials)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [1. Create a Google Cloud project](#1-create-a-google-cloud-project)
+  - [2. Enable the three APIs](#2-enable-the-three-apis)
+  - [3. Configure the OAuth consent screen](#3-configure-the-oauth-consent-screen)
+  - [4. Create the OAuth client](#4-create-the-oauth-client)
+  - [5. Log in](#5-log-in)
+  - [Where credentials are stored](#where-credentials-are-stored)
+- [Commands](#commands)
+  - [Self-diagnosis](#self-diagnosis)
+- [Output](#output)
+- [Use as a library](#use-as-a-library)
+- [Things worth knowing](#things-worth-knowing)
+- [Quota](#quota)
+- [Project Structure](#project-structure)
+- [Documentation](#documentation)
+- [Requirements](#requirements)
+- [License](#license)
+<!-- END toc -->
+
+## Overview
+
+`ytstats` reads a channel you own — metadata, videos, daily metrics, traffic sources, demographics, devices, content types, search terms, geography, playback locations, retention curves, and thumbnail CTR — and prints it as one JSON document.
+
+It is built for programs first. **stdout is exactly one JSON document, always** — success, failure, bad flag, unknown command, crash. Progress goes to stderr and is safe to discard. Every failure carries a stable code, a cause, `recoverable`/`retryable` flags, and runnable next steps, so an agent in a retry loop knows whether to retry, fix something, or stop.
+
+### Why bring your own credentials
 
 `ytstats` has **no built-in Google client ID**, by design. You create a Google Cloud project, generate an OAuth client, and the CLI uses yours. This means:
 
@@ -19,7 +50,11 @@ No install. No server. No shared API key. Your data and your credentials never l
 
 The cost is about five minutes of setup, once.
 
-## Setup
+## Getting Started
+
+### Prerequisites
+
+Node.js 18+. No native dependencies, so `npx` is instant.
 
 ### 1. Create a Google Cloud project
 
@@ -32,6 +67,8 @@ The cost is about five minutes of setup, once.
 | YouTube Data API v3 | [enable](https://console.cloud.google.com/apis/library/youtube.googleapis.com) |
 | YouTube Analytics API | [enable](https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com) |
 | YouTube Reporting API | [enable](https://console.cloud.google.com/apis/library/youtubereporting.googleapis.com) |
+
+All three must be enabled in the **same project** that issues your OAuth client.
 
 ### 3. Configure the OAuth consent screen
 
@@ -57,7 +94,9 @@ Your browser opens, you approve, and you're done. Every later command needs no f
 npx ytstats channel
 ```
 
-## Where credentials are stored
+`--no-browser` prints a URL and reads the pasted redirect back, for SSH and headless machines.
+
+### Where credentials are stored
 
 Both the OAuth client and your tokens are written to a per-user directory, `0600`, readable only by you:
 
@@ -67,42 +106,23 @@ Both the OAuth client and your tokens are written to a per-user directory, `0600
 | Linux | `$XDG_CONFIG_HOME/ytstats/` (default `~/.config/ytstats/`) |
 | Windows | `%APPDATA%\ytstats\` |
 
-Override with `YTSTATS_CONFIG_DIR`. For CI, set `YTSTATS_CLIENT_ID` and `YTSTATS_CLIENT_SECRET` instead of a file.
-
-These are plaintext files, like `gcloud`, `gh`, and `aws` use. `ytstats logout` revokes the token with Google and deletes them.
+Override with `YTSTATS_CONFIG_DIR`. For CI, set `YTSTATS_CLIENT_ID` and `YTSTATS_CLIENT_SECRET` instead of a file. These are plaintext files, like `gcloud`, `gh`, and `aws` use. `ytstats logout` revokes the token with Google and deletes them.
 
 ## Commands
 
-### Authentication
-
-```bash
-ytstats login [--client-secret <path>] [--no-browser]
-ytstats logout [--all] [--forget-credentials]
-ytstats status                    # who's logged in, where config lives
-ytstats doctor                    # check every prerequisite, report what's missing
-ytstats use <channelId|@handle>   # switch default channel
-ytstats import-legacy <file>      # import tokens from a pre-ytstats install
-```
-
-`login` accepts `--timeout <seconds>` (default 300) so an automated caller is never blocked indefinitely waiting on a browser.
-
-`--no-browser` prints a URL and reads the pasted redirect back — for SSH and headless machines.
-
-### The one you'll actually use
+The one you'll actually use:
 
 ```bash
 ytstats fetch [--days 90] [--no-retention] [--retention-limit 50] [--reach]
 ```
 
-Every dimension in a single JSON document: channel, videos, daily metrics, per-video analytics, traffic sources and their details, demographics, devices, content types, search terms, geography, playback locations, and retention curves.
+Every dimension in a single JSON document. Individual analytics steps degrade rather than abort — YouTube rejects some metric combinations for some channels, and losing demographics shouldn't cost you the other twelve datasets. Anything that failed appears in `warnings`.
 
-Individual analytics steps degrade rather than abort — YouTube rejects some metric combinations for some channels, and losing demographics shouldn't cost you the other twelve datasets. Anything that failed appears in `warnings`.
-
-### Individual datasets
+Individual datasets and account management:
 
 ```bash
 ytstats channel                       # metadata and lifetime stats
-ytstats videos [-n 10] [-t SHORTS] [-s viewCount] [--order asc]
+ytstats videos [-n 10] [-t SHORTS] [-s viewCount]
 ytstats daily [-d 30]                 # day-by-day metrics
 ytstats traffic                       # where views come from
 ytstats demographics                  # age and gender
@@ -110,36 +130,39 @@ ytstats devices
 ytstats content-types                 # Shorts vs long-form vs live
 ytstats search-terms                  # what people search to find you
 ytstats geography [-n 50]
-ytstats playback-locations            # Shorts feed vs watch page vs embedded
+ytstats playback-locations
 ytstats video-analytics               # per-video, top 200 by views
 ytstats retention <videoId>           # where viewers drop off
 ytstats reach                         # thumbnail impressions and CTR
-ytstats reach-jobs
-ytstats query -m views,likes --dimensions day   # arbitrary Analytics API query
+ytstats query -m views,likes --dimensions day
+
+ytstats login | logout | status | doctor | use <channel> | import-legacy <file>
 ```
 
-All accept `--days N`, or `--start YYYY-MM-DD --end YYYY-MM-DD`.
+All analytics commands accept `--days N`, or `--start YYYY-MM-DD --end YYYY-MM-DD`. Global flags: `-a, --account <channel>`, `--compact`, `-q, --quiet`.
 
-### Global flags
+Full reference with every flag and default: [docs/cli.md](docs/cli.md).
 
-| Flag | Effect |
-|---|---|
-| `-a, --account <channel>` | pick a channel when several are logged in |
-| `--compact` | single-line JSON |
-| `-q, --quiet` | silence stderr progress |
+### Self-diagnosis
 
-## Output contract
+When something is wrong and you don't know what:
 
-Designed for agents, not just humans. **stdout is exactly one JSON document, always** — success, failure, bad flag, unknown command, crash. There is no code path that writes nothing. Progress goes to stderr and is safe to discard.
+```bash
+ytstats doctor
+```
 
-The envelope is **shape-invariant**: every key is present on every response, so a consumer never branches on whether a field exists.
+It checks config writability, credentials, sign-in state, and live API reachability independently, and returns a pass/fail list plus the exact blocking diagnostics. `doctor` itself always succeeds (`ok: true`); the verdict is in `data.healthy`.
+
+## Output
+
+Every response is the same shape — every key present, every time, so a consumer never branches on whether a field exists:
 
 ```jsonc
 {
   "ok": true,
   "command": "channel",
   "fetchedAt": "2026-07-27T10:00:00.000Z",
-  "data": { … },          // null whenever ok is false — never partial
+  "data": { },            // null whenever ok is false — never partial
   "errors": [],           // non-empty iff ok is false
   "warnings": [],         // non-fatal; never affects ok or the exit code
   "nextSteps": [],        // ordered, deduplicated, ready-to-run commands
@@ -147,76 +170,16 @@ The envelope is **shape-invariant**: every key is present on every response, so 
 }
 ```
 
-### Diagnostics
-
-Each entry in `errors` / `warnings` answers four questions:
-
-```jsonc
-{
-  "code": "AUTH_TOKEN_EXPIRED",        // stable API — branch on this, never on prose
-  "severity": "error",
-  "title": "Stored refresh token is no longer valid",
-  "detail": "Google rejected the stored refresh token (invalid_grant)…",
-  "cause": "Most commonly the OAuth consent screen is still in Testing mode…",
-  "recoverable": true,                 // can this be fixed and retried at all?
-  "retryable": false,                  // would re-running the SAME command help?
-  "remediation": {
-    "summary": "Sign in again, then publish your consent screen to Production.",
-    "steps": ["Run: ytstats login", "…"],
-    "commands": [{ "run": "ytstats login", "description": "Re-authorize this machine" }],
-    "docs": ["https://console.cloud.google.com/apis/credentials/consent"]
-  },
-  "context": { "flag": "--start", "value": "01/01/2026", "expected": "YYYY-MM-DD" }
-}
-```
-
-`recoverable` and `retryable` exist to stop an agent looping pointlessly. `AUTH_SERVICE_ACCOUNT` is `recoverable: false` — no amount of retrying will ever make a service account work.
-
-### Failures are differentiated
-
-There is no single "not authenticated" bucket. Every distinct cause has its own code and its own fix:
-
-| Situation | Code |
-|---|---|
-| No Google Cloud OAuth client anywhere | `AUTH_NO_CREDENTIALS` |
-| Client exists, never logged in | `AUTH_NO_TOKENS` |
-| Refresh token rejected (usually the 7-day Testing trap) | `AUTH_TOKEN_EXPIRED` |
-| Access revoked | `AUTH_TOKEN_REVOKED` |
-| `--account` names an unknown channel | `AUTH_ACCOUNT_UNKNOWN` |
-| Consent screen dismissed | `AUTH_CONSENT_DECLINED` |
-| Service account key supplied | `AUTH_SERVICE_ACCOUNT` |
-| Client ID malformed | `AUTH_CLIENT_ID_INVALID` |
-| Google account owns no channel | `AUTH_NO_CHANNEL` |
-
-Plus `API_NOT_ENABLED`, `API_QUOTA_EXCEEDED`, `API_RATE_LIMITED`, `API_QUERY_NOT_SUPPORTED`, `API_FORBIDDEN`, `API_NOT_FOUND`, `API_UNAVAILABLE`, `NETWORK_UNREACHABLE`, `INPUT_UNKNOWN_COMMAND`, `INPUT_UNKNOWN_OPTION`, `INPUT_MISSING_REQUIRED`, `INPUT_INVALID_CHOICE`, `INPUT_INVALID_DATE`, `INPUT_INVALID_RANGE`, `INPUT_INVALID_VALUE`, `DATA_PARTIAL`, `DATA_EMPTY`, `REACH_PENDING`, `CONFIG_UNWRITABLE`, `UNEXPECTED`.
-
-### Input is validated before authentication
-
-All input problems are reported **together**, before any network call — so one loop iteration fixes everything rather than discovering a bad date only after fixing auth:
-
-```bash
-$ ytstats daily --start 01/01/2026 --end yesterday --days -3
-# → 3 errors in one envelope: two INPUT_INVALID_DATE, one INPUT_INVALID_RANGE
-```
-
-### Self-diagnosis
-
-When something is wrong and you don't know what, ask:
-
-```bash
-ytstats doctor
-```
-
-It checks config writability, credentials, sign-in state and live API reachability independently, and returns a pass/fail list plus the exact blocking diagnostics. `doctor` itself always succeeds (`ok: true`); the verdict is in `data.healthy`.
-
-### Exit codes
-
-`0` success · `2` authentication · `3` bad input · `4` API error · `1` anything else. Also available as `meta.exitCode`, so a consumer that can only see stdout still knows.
+Exit codes: `0` success · `2` authentication · `3` bad input · `4` API error · `1` anything else. Also available as `meta.exitCode`, so a consumer that can only see stdout still knows.
 
 ```bash
 ytstats fetch --days 30 2>/dev/null | jq '.data.channel.subscriberCount'
 ytstats fetch 2>/dev/null | jq -r 'if .ok then "fine" else .nextSteps[0] end'
 ```
+
+Input is validated **before** authentication, and every input problem is reported together — so one loop iteration fixes everything rather than discovering a bad date only after fixing auth.
+
+The envelope, the diagnostic schema, and the full failure-code catalog are in [docs/output-contract.md](docs/output-contract.md).
 
 ## Use as a library
 
@@ -226,6 +189,8 @@ import { getAuthenticatedClient, createApis, fetchAll, resolveDateRange } from '
 const { client } = getAuthenticatedClient();
 const result = await fetchAll(createApis(client), { range: resolveDateRange({ days: 90 }) });
 ```
+
+Library callers get no envelope: `fetchAll` returns its result object directly and fetchers throw `YtStatsError`. The full export surface is listed in [docs/architecture.md](docs/architecture.md#programmatic-api).
 
 ## Things worth knowing
 
@@ -241,19 +206,50 @@ const result = await fetchAll(createApis(client), { range: resolveDateRange({ da
 
 **`fetch --reach` and retention cost extra calls.** Retention is one API call per video, hence `--retention-limit` (default 50, newest first).
 
+The rest, with the handling sites named, is in [docs/gotchas.md](docs/gotchas.md).
+
 ## Quota
 
 The Data API allows 10,000 units/day per project. `ytstats` uses the uploads playlist (1 unit per 50 videos) rather than `search.list` (100 units per call), so a full fetch for a 100-video channel costs about 5 units. The Analytics and Reporting APIs have separate quotas.
 
+## Project Structure
+
+```
+bin/ytstats.js       thin shim; guards stdout against stack traces
+src/
+  cli.js             command definitions, validation ordering, error capture
+  index.js           the library entry point
+  auth/              credentials, OAuth loopback flow, token store, session
+  api/               Data v3, Analytics v2, Reporting v1, pure transforms
+  config/            per-user config dir, atomic 0600 store
+  fetch-all.js       one-document orchestrator with per-step degradation
+  output.js          the envelope; stdout/stderr discipline
+  diagnostics.js     the failure catalog
+  errors.js          YtStatsError, Google error classification, redaction
+  dates.js           reporting window resolution and validation
+test/                316 tests, none requiring network access
+docs/                topic documentation, indexed below
+```
+
 ## Documentation
 
-- [docs/api-gotchas.md](docs/api-gotchas.md) — non-obvious YouTube API behaviour, what breaks and where it is handled
-- [docs/architecture.md](docs/architecture.md) — module layout, design principles, testing strategy, how to add a dataset
-- [CHANGELOG.md](CHANGELOG.md)
+<!-- BEGIN doc-index -->
+- [Architecture](docs/architecture.md) — How ytstats is put together — module layout, design principles, request flow, and the programmatic API surface.
+- [Authentication](docs/auth.md) — The bring-your-own-credentials OAuth model — credential resolution, the PKCE loopback flow, token storage, and multi-account handling.
+- [CLI Reference](docs/cli.md) — Complete ytstats command reference — every command, flag, default, and exit code.
+- [Configuration](docs/configuration.md) — Environment variables, the per-user config directory, stored file formats, and CI setup.
+- [Contributing](docs/contributing.md) — How to extend ytstats — adding datasets, commands, and diagnostics; the dependency policy; and the release process.
+- [Gotchas](docs/gotchas.md)
+- [Output Contract](docs/output-contract.md) — The JSON envelope, the diagnostic schema, the full failure-code catalog, and exit-code derivation.
+- [Testing](docs/testing.md) — How ytstats is tested — injection seams, temp config dirs, real-HTTP loopback tests, subprocess end-to-end runs, and what coverage numbers actually mean.
+- [YouTube APIs](docs/youtube-apis.md) — How ytstats calls the YouTube Data, Analytics, and Reporting APIs — exact queries, encoded limits, quota costs, and transforms.
+<!-- END doc-index -->
+
+Also: [CHANGELOG.md](CHANGELOG.md).
 
 ## Requirements
 
-Node.js 18+. No native dependencies, so `npx` is instant.
+Node.js 18+. No native dependencies.
 
 ## License
 

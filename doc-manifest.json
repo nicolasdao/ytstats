@@ -1,0 +1,649 @@
+{
+  "diagnostics": {
+    "gotchas": {
+      "dead_hub_links": [],
+      "format": "hub+domain",
+      "orphaned_domain_files": [],
+      "oversized_domain_files": []
+    }
+  },
+  "generated_from": "README.md + docs/**/*.md (excl docs/manual/)",
+  "nodes": [
+    {
+      "dangling": false,
+      "description": null,
+      "has_frontmatter": false,
+      "headings": [
+        "ytstats",
+        "Table of Contents",
+        "Overview",
+        "Why bring your own credentials",
+        "Getting Started",
+        "Prerequisites",
+        "1. Create a Google Cloud project",
+        "2. Enable the three APIs",
+        "3. Configure the OAuth consent screen",
+        "4. Create the OAuth client",
+        "5. Log in",
+        "Where credentials are stored",
+        "Commands",
+        "Self-diagnosis",
+        "Output",
+        "Use as a library",
+        "Things worth knowing",
+        "Quota",
+        "Project Structure",
+        "Documentation",
+        "Requirements",
+        "License"
+      ],
+      "line_count": 256,
+      "links_to": [
+        "CHANGELOG.md",
+        "docs/architecture.md",
+        "docs/auth.md",
+        "docs/cli.md",
+        "docs/configuration.md",
+        "docs/contributing.md",
+        "docs/gotchas.md",
+        "docs/output-contract.md",
+        "docs/testing.md",
+        "docs/youtube-apis.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "README.md",
+      "source": [],
+      "source_unresolved": [],
+      "tags": [],
+      "toc": {
+        "linked": true,
+        "present": true,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "How ytstats is put together — module layout, design principles, request flow, and the programmatic API surface.",
+      "has_frontmatter": true,
+      "headings": [
+        "Architecture",
+        "Shape",
+        "Design principles",
+        "Module responsibilities",
+        "Request flow",
+        "fetch-all orchestration",
+        "Programmatic API",
+        "Two error vocabularies"
+      ],
+      "line_count": 128,
+      "links_to": [
+        "docs/cli.md",
+        "docs/contributing.md",
+        "docs/gotchas/cli-output.md",
+        "docs/output-contract.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/architecture.md",
+      "source": [
+        "bin/ytstats.js",
+        "src/index.js",
+        "src/cli.js",
+        "src/fetch-all.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "architecture",
+        "design",
+        "modules",
+        "orchestration"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "The bring-your-own-credentials OAuth model — credential resolution, the PKCE loopback flow, token storage, and multi-account handling.",
+      "has_frontmatter": true,
+      "headings": [
+        "Authentication",
+        "Why bring your own credentials",
+        "Scopes",
+        "Credential resolution",
+        "File shapes accepted",
+        "Auto-discovery",
+        "Client ID pre-flight validation",
+        "The login flow",
+        "Timeout",
+        "The --no-browser flow",
+        "Token storage",
+        "Refresh persistence",
+        "Account selection",
+        "Failure diagnosis order",
+        "Logout",
+        "Legacy import"
+      ],
+      "line_count": 186,
+      "links_to": [
+        "README.md",
+        "docs/configuration.md",
+        "docs/gotchas/auth.md",
+        "docs/output-contract.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/auth.md",
+      "source": [
+        "src/auth/**"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "auth",
+        "oauth",
+        "pkce",
+        "credentials",
+        "tokens",
+        "security"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Complete ytstats command reference — every command, flag, default, and exit code.",
+      "has_frontmatter": true,
+      "headings": [
+        "CLI Reference",
+        "Invocation",
+        "Global flags",
+        "Date window flags",
+        "Authentication commands",
+        "login",
+        "logout",
+        "status",
+        "doctor",
+        "use",
+        "import-legacy",
+        "fetch",
+        "Dataset commands",
+        "channel",
+        "videos",
+        "retention",
+        "reach",
+        "query",
+        "Exit codes"
+      ],
+      "line_count": 285,
+      "links_to": [
+        "docs/architecture.md",
+        "docs/configuration.md",
+        "docs/gotchas/youtube-api.md",
+        "docs/output-contract.md",
+        "docs/youtube-apis.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/cli.md",
+      "source": [
+        "src/cli.js",
+        "src/dates.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "cli",
+        "commands",
+        "flags",
+        "reference"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Environment variables, the per-user config directory, stored file formats, and CI setup.",
+      "has_frontmatter": true,
+      "headings": [
+        "Configuration",
+        "Environment variables",
+        "The config directory",
+        "Stored files",
+        "credentials.json",
+        "tokens.json",
+        "Permissions and write discipline",
+        "CI and headless machines",
+        "Credential resolution order",
+        "Not committing credentials"
+      ],
+      "line_count": 127,
+      "links_to": [
+        "docs/auth.md",
+        "docs/gotchas/config-storage.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/configuration.md",
+      "source": [
+        "src/config/**",
+        "src/auth/credentials.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "configuration",
+        "environment",
+        "config-directory",
+        "ci"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "How to extend ytstats — adding datasets, commands, and diagnostics; the dependency policy; and the release process.",
+      "has_frontmatter": true,
+      "headings": [
+        "Contributing",
+        "Adding a new dataset",
+        "Adding a command",
+        "Adding a diagnostic",
+        "The stability contract",
+        "Dependency policy",
+        "The gaxios override",
+        "Testing requirements",
+        "Release process",
+        "Documentation"
+      ],
+      "line_count": 108,
+      "links_to": [
+        "README.md",
+        "docs/architecture.md",
+        "docs/cli.md",
+        "docs/gotchas/youtube-api.md",
+        "docs/output-contract.md",
+        "docs/testing.md",
+        "docs/youtube-apis.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/contributing.md",
+      "source": [
+        "package.json",
+        "CHANGELOG.md",
+        "vitest.config.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "contributing",
+        "workflow",
+        "dependencies",
+        "release",
+        "versioning"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": null,
+      "has_frontmatter": false,
+      "headings": [
+        "Gotchas"
+      ],
+      "line_count": 10,
+      "links_to": [
+        "docs/gotchas/auth.md",
+        "docs/gotchas/cli-output.md",
+        "docs/gotchas/config-storage.md",
+        "docs/gotchas/youtube-api.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/gotchas.md",
+      "source": [],
+      "source_unresolved": [],
+      "tags": [],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Credential and OAuth traps — service accounts, weekly token expiry, silent browser failures, and refresh-token preservation.",
+      "has_frontmatter": true,
+      "headings": [
+        "Authentication Gotchas",
+        "Service accounts can never be used",
+        "Testing-mode consent screens expire tokens weekly",
+        "A bad client ID fails in the browser, not the API",
+        "A merely unusual client ID must not lock anyone out",
+        "Google omits refresh_token on refresh, so saving must merge",
+        "The client secret must be stored, not discarded after login",
+        "Channel identity is fetched before anything is persisted",
+        "Credentials are diagnosed before tokens",
+        "An unknown --account never falls back to the default",
+        "The loopback server binds 127.0.0.1, never 0.0.0.0",
+        "The favicon request is not the callback",
+        "--no-browser uses a deliberately dead redirect URI",
+        "Logout removes local tokens even when revocation fails",
+        "A read-only config dir must not break a working command"
+      ],
+      "line_count": 121,
+      "links_to": [
+        "docs/auth.md",
+        "docs/gotchas/config-storage.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/gotchas/auth.md",
+      "source": [
+        "src/auth/**"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "auth",
+        "oauth",
+        "credentials",
+        "tokens",
+        "gotchas"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Traps in the CLI wiring and the output envelope — Commander overrides, severity forcing, validation ordering, and redaction.",
+      "has_frontmatter": true,
+      "headings": [
+        "CLI and Output Gotchas",
+        "Commander's default behaviour writes nothing to stdout",
+        "--help and --version arrive as thrown errors",
+        "Global flags are not known when the reporter is first built",
+        "warn() forces severity to warning, and must",
+        "data is null on failure, never partial",
+        "Errors carrying warning severity are re-sorted into warnings",
+        "Input is validated before authentication",
+        "The range check is skipped when a date is already invalid",
+        "Date validation exists in two places, deliberately",
+        "Redaction deliberately spares the \"code\" field",
+        "Redaction runs on the serialized JSON, not the object",
+        "Google error classification is order-dependent",
+        "An empty result set is reported explicitly",
+        "--no-retention is Commander's negation, so the option reads as `retention`",
+        "Exit codes are also in the envelope",
+        "The bin shim is the last line of defence",
+        "Diagnostic detail is folded from context, so callers need not format it"
+      ],
+      "line_count": 155,
+      "links_to": [
+        "docs/cli.md",
+        "docs/output-contract.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/gotchas/cli-output.md",
+      "source": [
+        "src/cli.js",
+        "src/output.js",
+        "src/errors.js",
+        "src/diagnostics.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "cli",
+        "output",
+        "diagnostics",
+        "commander",
+        "gotchas"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Traps in the per-user config store — atomic writes, permission windows, path traversal, and platform differences.",
+      "has_frontmatter": true,
+      "headings": [
+        "Config and Storage Gotchas",
+        "The temp file is created *at* 0600, not chmod'd afterwards",
+        "The write is atomic via rename, so a crash never truncates tokens",
+        "chmod runs again after the rename",
+        "The directory mode is asserted, not assumed",
+        "Unsafe filenames are rejected, not sanitised",
+        "Windows relies on directory location, not file modes",
+        "readJson returns null for a corrupt file, not an error",
+        "A relative XDG_CONFIG_HOME is ignored, per spec",
+        "Config path resolution is pure so every OS can be tested from any OS",
+        "listFiles filters in-flight temp files",
+        "removeAccount deletes the file when the last account goes"
+      ],
+      "line_count": 98,
+      "links_to": [
+        "docs/configuration.md",
+        "docs/gotchas/auth.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/gotchas/config-storage.md",
+      "source": [
+        "src/config/**"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "config",
+        "storage",
+        "permissions",
+        "security",
+        "gotchas"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "Non-obvious behaviour of the three YouTube APIs — metrics that never work, undocumented limits, and lag that cannot be removed.",
+      "has_frontmatter": true,
+      "headings": [
+        "YouTube API Gotchas",
+        "CTR and impressions do not work on the Analytics API",
+        "Reporting API data is always 1-2 days behind",
+        "The first reach run returns nothing for 24-48 hours",
+        "Reach reports overlap, so rows must be deduped",
+        "Per-video analytics rejects maxResults above 200",
+        "Traffic source detail queries are fragile in three separate ways",
+        "Retention ratios legitimately exceed 1.0",
+        "Two content-type vocabularies disagree",
+        "Subscriber counts are rounded",
+        "Reporting API CSVs need a real CSV parser",
+        "Reporting API dates arrive in a different format",
+        "CSV cells with a leading zero must stay strings",
+        "search.list costs 100x what playlistItems.list costs",
+        "Card metrics fail on some channels and are swallowed"
+      ],
+      "line_count": 132,
+      "links_to": [
+        "docs/gotchas/auth.md",
+        "docs/youtube-apis.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/gotchas/youtube-api.md",
+      "source": [
+        "src/api/**"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "youtube-api",
+        "analytics",
+        "reporting",
+        "quota",
+        "gotchas"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "The JSON envelope, the diagnostic schema, the full failure-code catalog, and exit-code derivation.",
+      "has_frontmatter": true,
+      "headings": [
+        "Output Contract",
+        "The two rules",
+        "The envelope",
+        "Diagnostics",
+        "recoverable vs retryable",
+        "context",
+        "nextSteps",
+        "Diagnostic catalog",
+        "Authentication — exit 2",
+        "Google APIs — exit 4",
+        "Input — exit 3",
+        "Data and config",
+        "Exit codes",
+        "Two code vocabularies",
+        "Error classification",
+        "Redaction",
+        "Failures are differentiated"
+      ],
+      "line_count": 214,
+      "links_to": [
+        "docs/gotchas/cli-output.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/output-contract.md",
+      "source": [
+        "src/output.js",
+        "src/diagnostics.js",
+        "src/errors.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "output",
+        "envelope",
+        "diagnostics",
+        "error-codes",
+        "agents"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "How ytstats is tested — injection seams, temp config dirs, real-HTTP loopback tests, subprocess end-to-end runs, and what coverage numbers actually mean.",
+      "has_frontmatter": true,
+      "headings": [
+        "Testing",
+        "Running",
+        "Injection is the strategy",
+        "Test files",
+        "Isolation",
+        "What each layer proves",
+        "Coverage numbers",
+        "What is not covered",
+        "Adding tests"
+      ],
+      "line_count": 93,
+      "links_to": [
+        "docs/contributing.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/testing.md",
+      "source": [
+        "test/**",
+        "vitest.config.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "testing",
+        "vitest",
+        "coverage",
+        "injection"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    },
+    {
+      "dangling": false,
+      "description": "How ytstats calls the YouTube Data, Analytics, and Reporting APIs — exact queries, encoded limits, quota costs, and transforms.",
+      "has_frontmatter": true,
+      "headings": [
+        "YouTube APIs",
+        "The three surfaces",
+        "Data API v3",
+        "fetchChannel",
+        "fetchAllVideoIds",
+        "fetchVideos",
+        "Quota costs",
+        "Analytics API v2",
+        "Fetchers",
+        "Notable omission",
+        "fetchCardMetrics degrades silently",
+        "runCustomReport",
+        "Reporting API v1",
+        "downloadCsv",
+        "Transforms",
+        "Orchestration"
+      ],
+      "line_count": 180,
+      "links_to": [
+        "docs/gotchas/youtube-api.md"
+      ],
+      "over_size": false,
+      "parse_error": null,
+      "path": "docs/youtube-apis.md",
+      "source": [
+        "src/api/**",
+        "src/fetch-all.js"
+      ],
+      "source_unresolved": [],
+      "tags": [
+        "youtube-api",
+        "analytics",
+        "reporting",
+        "quota",
+        "fetchers"
+      ],
+      "toc": {
+        "linked": false,
+        "present": false,
+        "stale": false
+      }
+    }
+  ]
+}

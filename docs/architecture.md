@@ -1,171 +1,128 @@
+---
+description: How ytstats is put together — module layout, design principles, request flow, and the programmatic API surface.
+tags: [architecture, design, modules, orchestration]
+source:
+  - bin/ytstats.js
+  - src/index.js
+  - src/cli.js
+  - src/fetch-all.js
+---
+
 # Architecture
 
-Contributor-facing notes: how `ytstats` is put together and why. For usage, see the
-[README](../README.md). For YouTube's quirks, see [api-gotchas.md](api-gotchas.md).
-
-## Table of Contents
-
-- [Shape](#shape)
-- [Design Principles](#design-principles)
-- [Module Responsibilities](#module-responsibilities)
-- [Authentication](#authentication)
-- [The Output Contract](#the-output-contract)
-- [Diagnostics](#diagnostics)
-- [Testing Strategy](#testing-strategy)
-- [Adding a New Dataset](#adding-a-new-dataset)
+Contributor-facing notes on how `ytstats` is built and why. For the command surface see [cli.md](cli.md); for how to change it see [contributing.md](contributing.md).
 
 ## Shape
 
 ```
-bin/ytstats.js          thin shim
+bin/ytstats.js          thin shim; last-resort guard against stdout pollution
   └─ src/cli.js         command definitions, validation ordering, error capture
        ├─ src/auth/     credentials, OAuth, token store, session
        ├─ src/api/      Data v3, Analytics v2, Reporting v1, pure transforms
        ├─ src/fetch-all.js   one-document orchestrator with per-step degradation
        ├─ src/output.js      the envelope; stdout/stderr discipline
        ├─ src/diagnostics.js the failure catalog
+       ├─ src/errors.js      YtStatsError, Google error classification, redaction
+       ├─ src/dates.js       reporting window resolution and validation
        └─ src/config/   per-user config dir, atomic 0600 store
 ```
 
-## Design Principles
+`src/index.js` is a separate entry point — the library surface — and imports the same modules the CLI does.
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback
-server, the browser opener, the identity lookup, the output sinks, and even `now()`
-are parameters with real defaults. This is why 316 tests run without a network
-connection and without opening a browser.
+## Design principles
 
-**Pure logic is separated from effects.** `transforms.js`, `dates.js`,
-`config/paths.js` and `diagnostics.js` are pure and directly tested. Everything
-awkward to test is pushed to the edges.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 316 tests run without a network connection and without opening a browser.
 
-**No native dependencies.** `npx ytstats` must start instantly. That rules out
-anything requiring a prebuild download or a node-gyp compile. Runtime deps are
-`commander`, `googleapis`, `open` — all pure JS. Think hard before adding a fourth.
+**Pure logic is separated from effects.** `api/transforms.js`, `dates.js`, `config/paths.js` and `diagnostics.js` are pure and directly tested. Everything awkward to test is pushed to the edges.
 
-**Read-only by design.** Only three read-only scopes are ever requested. `ytstats`
-has no code path that modifies a channel.
+**No native dependencies.** `npx ytstats` must start instantly, which rules out anything requiring a prebuild download or a node-gyp compile. Runtime dependencies are `commander`, `googleapis`, and `open` — all pure JS. Think hard before adding a fourth.
 
-## Module Responsibilities
+**Read-only by design.** Only three read-only scopes are ever requested (`SCOPES` in `src/auth/oauth.js`). `ytstats` has no code path that modifies a channel.
+
+**The consumer is assumed to be a program.** stdout carries exactly one JSON document on every code path; diagnostics are structured, coded, and carry runnable remediation. See [output-contract.md](output-contract.md).
+
+## Module responsibilities
 
 | Module | Responsibility |
 |---|---|
-| `config/paths.js` | Per-OS config dir. Pure — platform/env/home injected, so Windows and Linux behaviour is asserted from any machine. |
+| `config/paths.js` | Per-OS config dir. Pure — platform, env, and home are injected, so Windows and Linux behaviour is asserted from any machine. |
 | `config/store.js` | Atomic `0600` JSON read/write, traversal-safe filenames. |
 | `auth/credentials.js` | BYO credential resolution and validation. Rejects service accounts and malformed client IDs before they cost a browser round trip. |
-| `auth/oauth.js` | PKCE pair, CSRF state, loopback callback server, auth URL builder. |
+| `auth/oauth.js` | PKCE pair, CSRF state, loopback callback server, auth URL builder, scope list. |
 | `auth/tokens.js` | Multi-account token store keyed by channel; legacy import. |
 | `auth/session.js` | Ties the above together: `login`, `logout`, `getAuthenticatedClient` with refresh persistence. |
-| `api/client.js` | Builds the three API surfaces plus an authenticated CSV downloader. |
-| `api/transforms.js` | Pure shaping: duration parsing, content classification, CSV, date normalization. |
-| `api/data.js` | Data API v3 fetchers. |
-| `api/analytics.js` | Analytics API v2 fetchers, with the documented limits encoded as constants. |
+| `api/client.js` | Builds the three API surfaces plus an authenticated CSV downloader; wraps calls in error mapping. |
+| `api/transforms.js` | Pure shaping: duration parsing, content classification, CSV, date normalization, row zipping. |
+| `api/data.js` | Data API v3 fetchers — channel, video ids, video resources. |
+| `api/analytics.js` | Analytics API v2 fetchers, with the undocumented limits encoded as constants. |
 | `api/reporting.js` | Reporting API v1 job lifecycle and reach download. |
 | `fetch-all.js` | Orchestrates every dataset into one document, degrading per step. |
 | `dates.js` | Reporting window resolution and validation. |
 | `output.js` | The envelope and the stdout/stderr split. |
-| `diagnostics.js` | The failure catalog. |
+| `diagnostics.js` | The failure catalog and exit-code derivation. |
 | `errors.js` | `YtStatsError`, Google error classification, secret redaction. |
 | `cli.js` | Commander wiring, validation-before-auth ordering, Commander error capture. |
 
-## Authentication
+## Request flow
 
-Bring-your-own-credentials: there is **no** built-in client ID. Resolution order is
-`--client-secret` → `YTSTATS_CLIENT_ID`/`YTSTATS_CLIENT_SECRET` → stored
-`credentials.json` → `client_secret*.json` in the working directory.
+A data command travels the same path every time:
 
-`login` runs the loopback flow Google recommends for desktop apps:
+1. **`bin/ytstats.js`** calls `main(process.argv)`, with a final `catch` that guarantees no stack trace ever reaches stdout.
+2. **`main()`** builds the program and calls `parseAsync`. Commander errors are thrown rather than exited (`exitOverride()`) and converted by `diagnoseCommanderError()`.
+3. **The `run()` wrapper** executes the command's `validate` callback first, collecting *every* input problem into one envelope before any network call. See [validation ordering](gotchas/cli-output.md#input-is-validated-before-authentication).
+4. **`withApis()`** calls `getAuthenticatedClient()` — which resolves credentials, loads the stored account, and registers a `tokens` listener so refreshed tokens are written back — then `createApis()` bundles the three API surfaces.
+5. **The command body** calls one or more fetchers, passing the `apis` bundle as the first argument.
+6. **`reporter.succeed()` / `reporter.fail()`** renders the single JSON envelope to stdout and returns the exit code.
 
-1. Generate a PKCE pair (S256) and an unguessable `state`.
-2. Bind an HTTP server to `127.0.0.1` on an ephemeral port — never `0.0.0.0`.
-3. Open the browser at Google with `access_type=offline&prompt=consent`.
-4. Capture the callback, compare `state` in constant time, reject on mismatch.
-5. Exchange the code with the PKCE verifier. The success page contains no token
-   material and never echoes the authorization code.
-6. Fetch the channel identity, *then* persist — so a failed lookup cannot leave a
-   half-written account behind.
+Progress messages go to stderr throughout via `reporter.progress()` and are safe to discard.
 
-The client secret must be **stored, not discarded**: Google's token endpoint
-requires it on every refresh, not just the initial exchange.
+## fetch-all orchestration
 
-Storage is a per-user directory (`~/Library/Application Support/ytstats`,
-`%APPDATA%\ytstats`, `$XDG_CONFIG_HOME/ytstats`), written atomically — temp file
-created *at* `0600`, then renamed — so a crash never leaves a partial token file and
-a secret is never briefly world-readable.
+`fetchAll()` is the one place that runs every dataset in a single pass. Three properties matter:
 
-## The Output Contract
+**Channel identity is the only hard requirement.** It is fetched outside `step()`, and a missing channel throws `NO_YOUTUBE_CHANNEL` — everything downstream keys off `channel.uploadsPlaylistId`.
 
-Two rules, both load-bearing:
+**Individual steps degrade rather than abort.** Each dataset runs inside `step(name, fn, fallback)`, which catches, records `{ step, code, message }` in `warnings`, and returns the fallback. YouTube rejects certain metric/dimension combinations for certain channels, and losing demographics should not cost you the other twelve datasets.
 
-1. **stdout is exactly one JSON document, always.** Every code path, including
-   unknown commands and invalid flags. Commander's default behaviour — prose to
-   stderr, `process.exit`, empty stdout — is overridden via `exitOverride()` and
-   `configureOutput()` precisely because it violates this.
-2. **stderr is everything a human reads** and is safe to discard entirely.
+**Auth and quota failures are fatal anyway.** `FATAL_CODES` — `NOT_AUTHENTICATED`, `MISSING_CREDENTIALS`, `INVALID_CREDENTIALS`, `NO_YOUTUBE_CHANNEL`, `QUOTA_EXCEEDED` — rethrow instead of degrading, because continuing past them yields a document that is empty for reasons the caller cannot act on step by step.
 
-The envelope is shape-invariant: `ok`, `command`, `fetchedAt`, `data`, `errors`,
-`warnings`, `nextSteps`, `meta` are present on every response. `data` is `null`
-whenever `ok` is false — never partial, because a consumer that reads `data` without
-checking `ok` would otherwise act on half a dataset.
+Independent steps run concurrently in two `Promise.all` batches (daily + cards, then the eight analytics datasets). Traffic-source details are then fetched only for the source types the channel actually has, and retention runs sequentially because it costs one API call per video.
 
-## Diagnostics
+The return value is `{ period, warnings, notes, data }`. `notes` carries non-diagnostic information such as "retention fetched for 50 of 120 videos".
 
-The consumer is assumed to be an LLM in a retry loop, not a human at a terminal.
-So every anticipated failure gets its own code and its own recovery path — a single
-generic "not authenticated" would force the caller to guess between six unrelated
-problems.
+## Programmatic API
 
-Each diagnostic answers four questions: what happened (`title`/`detail`), why
-(`cause`), can it be fixed (`recoverable`/`retryable`), and what to run next
-(`remediation.commands`).
+`src/index.js` re-exports the module surface so a Node caller can skip the process spawn and the JSON round-trip:
 
-`recoverable` and `retryable` are the anti-loop signals. `AUTH_SERVICE_ACCOUNT` is
-`recoverable: false` because no amount of retrying will ever make it work;
-`AUTH_TIMEOUT` is `retryable: false` because the usual cause is a browser-side
-rejection that a plain retry cannot fix.
+```js
+import { getAuthenticatedClient, createApis, fetchAll, resolveDateRange } from 'ytstats';
 
-Two ordering rules matter:
+const { client } = getAuthenticatedClient();
+const result = await fetchAll(createApis(client), { range: resolveDateRange({ days: 90 }) });
+```
 
-- **Input is validated before authentication.** Checking auth first would hide a
-  malformed date behind a login error, costing an agent an extra round trip.
-- **Credentials are diagnosed before tokens.** Telling someone with no Google Cloud
-  project to "run login" sends them down a path that cannot succeed.
+The exported surface, grouped:
 
-`code` values are public API. Add freely; never repurpose or delete without a major
-version bump.
+| Group | Exports |
+|---|---|
+| Session | `getAuthenticatedClient`, `login`, `logout` |
+| Credentials | `resolveCredentials`, `saveCredentials`, `clearCredentials`, `loadStoredCredentials`, `discoverClientSecretFile`, `parseClientSecret` |
+| Accounts | `loadAccount`, `listAccounts`, `saveAccount`, `removeAccount`, `setDefaultAccount`, `clearAllAccounts`, `migrateLegacyTokens` |
+| APIs | `createApis`, `data`, `analytics`, `reporting` (namespace exports), plus everything in `api/transforms.js` |
+| Orchestration | `fetchAll` |
+| Dates | `resolveDateRange`, `daysBetween`, `toIsoDate` |
+| Output | `renderEnvelope`, `createReporter` |
+| Errors | `YtStatsError`, `ERROR_CODES`, `EXIT_CODES`, `mapGoogleError`, `diagnoseGoogleError`, `fail`, `redact` |
+| Diagnostics | `DIAGNOSTICS`, `diagnose`, `isDiagnostic`, `SEVERITY`, `EXIT` |
+| CLI | `buildProgram`, `main`, `SCOPES`, `configDir` |
 
-## Testing Strategy
+Library callers get no envelope: `fetchAll` returns its result object directly and fetchers throw `YtStatsError`. Use `renderEnvelope()` if you want the CLI's output shape.
 
-316 tests, none requiring network access.
+## Two error vocabularies
 
-- **Pure functions** tested directly.
-- **Fetchers** take an injected API bundle, so tests assert the exact query
-  parameters sent. This is how the `maxResults` limits are pinned rather than merely
-  documented.
-- **The session layer** injects `OAuth2`, the loopback server, the browser opener
-  and identity lookup, so `login`/`logout` are covered without Google.
-- **The loopback server** is tested for real over HTTP on `127.0.0.1`: state
-  mismatch, user denial, timeout, favicon noise, and the guarantee that the success
-  page never contains the authorization code.
-- **The CLI** is tested end to end by spawning the actual binary and asserting exit
-  codes and stdout parseability.
+`ytstats` carries two code sets, and the distinction matters when reading the source:
 
-Note on coverage: `src/cli.js` reports 0% because its 23 end-to-end tests run it as
-a **subprocess**, which v8 coverage cannot instrument from the parent process. It is
-well covered; the number is a measurement artifact.
+- **`DIAGNOSTICS` codes** (`src/diagnostics.js`) — the fine-grained public catalog surfaced in the envelope: `AUTH_TOKEN_EXPIRED`, `API_QUOTA_EXCEEDED`, `INPUT_INVALID_DATE`, and so on. This is what consumers branch on.
+- **`ERROR_CODES`** (`src/errors.js`) — the coarser internal vocabulary carried on `YtStatsError.code`: `NOT_AUTHENTICATED`, `QUOTA_EXCEEDED`, `INVALID_INPUT`. Used for control flow such as `FATAL_CODES` in `fetch-all.js`.
 
-**Not covered:** no test performs a live call against Google. Request shapes are
-asserted against the documented contract, not the live service.
-
-## Adding a New Dataset
-
-1. Add the fetcher to the relevant `src/api/*.js`, taking `apis` as its first
-   argument so it stays injectable.
-2. Add a test asserting the **exact query parameters**, not just the return shape —
-   that is what protects the API limits.
-3. Wire it into `fetch-all.js` behind `step()` so a failure degrades to a warning
-   rather than aborting the run.
-4. Add a dedicated command in `cli.js` if it is independently useful.
-5. If it introduces a new failure mode, add a diagnostic to `diagnostics.js`. The
-   catalog test will fail unless it has a title, detail, cause, and at least one
-   remediation step.
-6. Update the README command list and `CHANGELOG.md`.
+`legacyCodeFor()` bridges the first onto the second when `mapGoogleError()` builds an error. Both are documented in [output-contract.md](output-contract.md).
