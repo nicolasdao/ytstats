@@ -1,0 +1,44 @@
+{
+	"name": "release-cli",
+	"version": "0.1.0",
+	"description": "Release workflow for the ytstats npm CLI. Gated on a clean tree, green tests, and a recorded changelog. Bumps, stamps CHANGELOG.md, commits, and tags. Has an unreleased ledger mode. Never publishes.",
+	"type": "skill",
+	"authors": [
+		"Nicolas Dao <nicolas.dao@gmail.com>"
+	],
+	"license": "BSD-3-Clause",
+	"repository": "https://github.com/nicolasdao/ytstats",
+	"dependencies": {},
+	"systemDependencies": {
+		"git": {
+			"description": "Git version control - used for status, log, diff, commit, and tag",
+			"version": ">=2.20.0",
+			"check": "git --version",
+			"install": {
+				"darwin": "brew install git",
+				"linux": "apt install git",
+				"win32": "winget install Git.Git"
+			}
+		},
+		"node": {
+			"description": "Node.js runtime - used to read the version from package.json",
+			"version": ">=18.0.0",
+			"check": "node --version",
+			"install": {
+				"darwin": "brew install node",
+				"linux": "Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "winget install OpenJS.NodeJS"
+			}
+		},
+		"npm": {
+			"description": "npm CLI - used to run the test suite as a release gate. Bundled with Node.js",
+			"version": ">=9.0.0",
+			"check": "npm --version",
+			"install": {
+				"darwin": "Bundled with Node.js: brew install node",
+				"linux": "Bundled with Node.js. Use nvm: https://github.com/nvm-sh/nvm",
+				"win32": "Bundled with Node.js: winget install OpenJS.NodeJS"
+			}
+		}
+	}
+}
