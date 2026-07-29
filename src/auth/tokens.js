@@ -35,7 +35,7 @@ function write(store) {
 }
 
 /** Persist (or update) one channel's tokens. First account logged in wins the default. */
-export function saveAccount({ channelId, channelTitle, customUrl, clientId, tokens }) {
+export function saveAccount({ channelId, channelTitle, customUrl, clientId, authorizedAt, tokens }) {
   if (!channelId) {
     throw new YtStatsError('Cannot save credentials without a channel id.', {
       code: ERROR_CODES.AUTH_FAILED,
@@ -52,6 +52,11 @@ export function saveAccount({ channelId, channelTitle, customUrl, clientId, toke
     // Falls back like the fields above: the refresh-token write-back path calls
     // this without a clientId, and must not erase the binding recorded at login.
     clientId: clientId ?? existing?.clientId ?? null,
+    // When the refresh token was ISSUED — set at login, preserved across refreshes.
+    // `savedAt` cannot serve this purpose: it is rewritten on every token refresh,
+    // so for anyone actually using the tool it always reads as "just now", and any
+    // check on token age silently never fires.
+    authorizedAt: authorizedAt ?? existing?.authorizedAt ?? null,
     // A refresh happens without a new refresh_token; keep the one we already hold.
     tokens: { ...(existing?.tokens ?? {}), ...tokens },
     savedAt: new Date().toISOString(),
@@ -91,6 +96,7 @@ export function listAccounts() {
     channelTitle: a.channelTitle,
     customUrl: a.customUrl,
     clientId: a.clientId ?? null,
+    authorizedAt: a.authorizedAt ?? null,
     savedAt: a.savedAt,
     isDefault: a.channelId === store.default,
   }));

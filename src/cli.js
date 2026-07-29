@@ -81,21 +81,47 @@ export function buildProgram(deps = {}) {
    */
   const run = (name, body, { validate } = {}) => async (...args) => {
     const opts = program.opts();
+    // Commander appends the Command instance as the final argument. Passing
+    // `...args` straight through therefore handed the *Command object* to the
+    // body's `globalOpts` parameter and dropped `program.opts()` entirely — so
+    // `globalOpts.account` was always undefined and `--account` silently did
+    // nothing, in either position. Every multi-channel caller got the default
+    // channel's data while believing they had selected another.
+    const params = args.slice(0, -1);
     try {
       if (validate) {
-        const problems = validate(...args, opts);
+        const problems = validate(...params, opts);
         if (problems?.length) return exit(reporter.fail(name, problems));
       }
-      const result = await body(...args, opts);
+      const result = await body(...params, opts);
       exit(reporter.succeed(name, result));
     } catch (err) {
       exit(reporter.fail(name, err));
     }
   };
 
+  /**
+   * The channel selector, accepted BEFORE the command (global) or after it
+   * (per-command). Commander does not fold a post-command global option back
+   * into the program's opts — it drops it silently — so reading only
+   * `globalOpts.account` meant `ytstats daily --account @other` quietly
+   * returned the DEFAULT channel's data, and `ytstats logout --account @other`
+   * quietly revoked the default channel's token. Silently answering about the
+   * wrong channel is the exact failure `AUTH_ACCOUNT_UNKNOWN` exists to prevent.
+   */
+  const accountFrom = (cmdOpts, globalOpts) => cmdOpts?.account ?? globalOpts?.account;
+
+  /** Registers the selector on a command so both positions work. */
+  const accountOption = cmd => cmd.option(
+    '-a, --account <channel>',
+    'channel id or @handle (also accepted before the command name)',
+  );
+
   /** Authenticate and hand back the API bundle for a command body. */
-  function withApis(globalOpts) {
-    const { client, account } = session.getAuthenticatedClient({ account: globalOpts.account });
+  function withApis(globalOpts, cmdOpts) {
+    const { client, account } = session.getAuthenticatedClient({
+      account: accountFrom(cmdOpts, globalOpts),
+    });
     return { apis: createApis(client), account };
   }
 
@@ -184,11 +210,12 @@ export function buildProgram(deps = {}) {
   program
     .command('logout')
     .description('revoke tokens with Google and forget them locally')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .option('--all', 'log out of every channel on this machine', false)
     .option('--forget-credentials', 'also delete the stored OAuth client id/secret', false)
     .action(run('logout', async (cmdOpts, globalOpts) => {
       const result = await session.logout({
-        account: globalOpts.account,
+        account: accountFrom(cmdOpts, globalOpts),
         all: cmdOpts.all,
         forgetCredentials: cmdOpts.forgetCredentials,
       });
@@ -236,6 +263,7 @@ export function buildProgram(deps = {}) {
   program
     .command('doctor')
     .description('check every prerequisite and report exactly what is missing')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .action(run('doctor', async (cmdOpts, globalOpts) => {
       // Ordered from cheapest to most expensive; each check reports pass/fail
       // independently so the caller sees the whole picture in one round trip.
@@ -294,7 +322,7 @@ export function buildProgram(deps = {}) {
       // "healthy" is worse than not checking: setup looks complete, then the
       // first `daily` or `reach` fails with API_NOT_ENABLED.
       if (credentials && accounts.length) {
-        const { apis } = withApis(globalOpts);
+        const { apis } = withApis(globalOpts, cmdOpts);
         const range = resolveDateRange({ days: 1 });
 
         // 4. Data API v3
@@ -348,8 +376,11 @@ export function buildProgram(deps = {}) {
       //
       // Age is the one honest signal: a token still working after 7 days proves
       // Production, because Testing would already have killed it.
+      // authorizedAt, never savedAt — savedAt is rewritten on every token refresh,
+      // so for an actively used install it always reads as "just now" and this
+      // check would never fire.
       const oldest = accounts
-        .map(a => Date.parse(a.savedAt ?? ''))
+        .map(a => Date.parse(a.authorizedAt ?? ''))
         .filter(t => Number.isFinite(t))
         .sort((a, b) => a - b)[0];
       const ageDays = oldest ? (now().getTime() - oldest) / 86_400_000 : null;
@@ -439,14 +470,16 @@ export function buildProgram(deps = {}) {
   program
     .command('channel')
     .description('channel metadata and lifetime stats')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .action(run('channel', async (cmdOpts, globalOpts) => {
-      const { apis } = withApis(globalOpts);
+      const { apis } = withApis(globalOpts, cmdOpts);
       return data.fetchChannel(apis);
     }));
 
   program
     .command('videos')
     .description('all videos with metadata and current view/like/comment counts')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .option('-n, --limit <number>', 'maximum videos to return')
     .addOption(new Option('-s, --sort <field>', 'sort field')
       .choices(['publishedAt', 'viewCount', 'likeCount', 'commentCount', 'durationSeconds'])
@@ -455,7 +488,7 @@ export function buildProgram(deps = {}) {
     .addOption(new Option('-t, --type <type>', 'filter by content type')
       .choices(['SHORTS', 'VIDEO_ON_DEMAND', 'LIVE_STREAM']))
     .action(run('videos', async (cmdOpts, globalOpts) => {
-      const { apis } = withApis(globalOpts);
+      const { apis } = withApis(globalOpts, cmdOpts);
       reporter.progress('Listing videos...');
       const channel = await data.fetchChannel(apis);
       if (!channel) throw new YtStatsError('No channel found.', { code: ERROR_CODES.NO_YOUTUBE_CHANNEL });
@@ -477,11 +510,11 @@ export function buildProgram(deps = {}) {
   // ------------------------------------------------------------ analytics
 
   const simple = (name, description, fn) => {
-    const cmd = program.command(name).description(description);
+    const cmd = accountOption(program.command(name).description(description));
     dateOptions(cmd).action(run(
       name,
       async (cmdOpts, globalOpts) => {
-        const { apis } = withApis(globalOpts);
+        const { apis } = withApis(globalOpts, cmdOpts);
         const range = rangeFrom(cmdOpts);
         reporter.progress(`Querying ${range.startDate} to ${range.endDate}...`);
         const rows = await fn(apis, range, cmdOpts);
@@ -530,9 +563,10 @@ export function buildProgram(deps = {}) {
   dateOptions(
     program
       .command('retention <videoId>')
-      .description('audience retention curve for one video (ratios >1.0 mean rewatching)'),
+      .description('audience retention curve for one video (ratios >1.0 mean rewatching)')
+      .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)'),
   ).action(run('retention', async (videoId, cmdOpts, globalOpts) => {
-    const { apis } = withApis(globalOpts);
+    const { apis } = withApis(globalOpts, cmdOpts);
     const range = rangeFrom(cmdOpts);
     const curve = await analytics.fetchAudienceRetention(apis, { ...range, videoId });
     return { videoId, period: range, curve };
@@ -542,13 +576,14 @@ export function buildProgram(deps = {}) {
     program
       .command('query')
       .description('arbitrary YouTube Analytics API query')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
       .requiredOption('-m, --metrics <list>', 'comma-separated metrics, e.g. views,likes')
       .option('--dimensions <list>', 'comma-separated dimensions, e.g. day')
       .option('--filters <filters>', 'dimension filters, e.g. video==VIDEO_ID')
       .option('--sort <field>', 'sort field, prefix with - for descending')
       .option('-n, --max <number>', 'maximum rows'),
   ).action(run('query', async (cmdOpts, globalOpts) => {
-    const { apis } = withApis(globalOpts);
+    const { apis } = withApis(globalOpts, cmdOpts);
     const range = rangeFrom(cmdOpts);
     return analytics.runCustomReport(apis, {
       ...range,
@@ -565,8 +600,9 @@ export function buildProgram(deps = {}) {
   program
     .command('reach')
     .description('thumbnail impressions and CTR (Reporting API; 1-2 days behind)')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .action(run('reach', async (cmdOpts, globalOpts) => {
-      const { apis } = withApis(globalOpts);
+      const { apis } = withApis(globalOpts, cmdOpts);
       const result = await reporting.fetchReach(apis, { onProgress: m => reporter.progress(m) });
       if (result.pending) reporter.warn(result.message);
       return result;
@@ -575,8 +611,9 @@ export function buildProgram(deps = {}) {
   program
     .command('reach-jobs')
     .description('list YouTube Reporting API jobs on this channel')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .action(run('reach-jobs', async (cmdOpts, globalOpts) => {
-      const { apis } = withApis(globalOpts);
+      const { apis } = withApis(globalOpts, cmdOpts);
       return reporting.listReachJobs(apis);
     }));
 
@@ -586,11 +623,12 @@ export function buildProgram(deps = {}) {
     program
       .command('fetch')
       .description('every dimension in a single JSON document (the one to pipe into a script)')
+    .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
       .option('--no-retention', 'skip retention curves (they cost one API call per video)')
       .option('--retention-limit <number>', 'how many recent videos to pull retention for', '50')
       .option('--reach', 'also include thumbnail impressions/CTR from the Reporting API', false),
   ).action(run('fetch', async (cmdOpts, globalOpts) => {
-    const { apis } = withApis(globalOpts);
+    const { apis } = withApis(globalOpts, cmdOpts);
     const range = rangeFrom(cmdOpts);
     reporter.progress(`Fetching ${range.startDate} to ${range.endDate}...`);
 

@@ -31,6 +31,53 @@ describe('ytstats CLI (end to end)', () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ytstats-e2e-')); });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
+  describe('the --account selector', () => {
+    // run() used to pass Commander's Command instance as the body's globalOpts,
+    // dropping program.opts() entirely — so --account was silently ignored in
+    // BOTH positions and every command fell back to the default channel. On a
+    // read command that is wrong data reported as correct; on logout it revoked
+    // the wrong channel's token.
+    function seed(dir) {
+      fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify({
+        version: 1, clientId: '111-x.apps.googleusercontent.com', clientSecret: 'GOCSPX-x',
+      }));
+      fs.writeFileSync(path.join(dir, 'tokens.json'), JSON.stringify({
+        version: 1, default: 'UC-AAA',
+        accounts: {
+          'UC-AAA': { channelId: 'UC-AAA', channelTitle: 'Alpha', customUrl: '@alpha', tokens: { refresh_token: '1//a' } },
+          'UC-BBB': { channelId: 'UC-BBB', channelTitle: 'Beta', customUrl: '@beta', tokens: { refresh_token: '1//b' } },
+        },
+      }));
+    }
+
+    it.each([
+      ['after the command', ['logout', '--account', '@nope']],
+      ['before the command', ['--account', '@nope', 'logout']],
+    ])('an unknown selector %s never falls back to the default', async (_label, args) => {
+      seed(dir);
+      const { stdout } = await ytstats(args, { configDir: dir, cwd: dir });
+      expect(JSON.parse(stdout).data?.loggedOut).not.toBe(true);
+      const left = JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf-8'));
+      expect(Object.keys(left.accounts).sort()).toEqual(['UC-AAA', 'UC-BBB']);
+    });
+
+    it('removes exactly the selected account, not the default', async () => {
+      seed(dir);
+      const { stdout } = await ytstats(['logout', '--account', '@beta'], { configDir: dir, cwd: dir });
+      expect(JSON.parse(stdout).data.accounts).toEqual(['UC-BBB']);
+      const left = JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf-8'));
+      expect(Object.keys(left.accounts)).toEqual(['UC-AAA']);
+    });
+
+    it('a read command reports AUTH_ACCOUNT_UNKNOWN rather than the default channel', async () => {
+      seed(dir);
+      const { stdout } = await ytstats(['channel', '--account', '@nope'], { configDir: dir, cwd: dir });
+      const out = JSON.parse(stdout);
+      expect(out.ok).toBe(false);
+      expect(out.errors[0].code).toBe('AUTH_ACCOUNT_UNKNOWN');
+    });
+  });
+
   describe('import-legacy', () => {
     it('reports an unreadable token file as bad input, not an internal error', async () => {
       // A mistyped path is ordinary during a migration. Reporting UNEXPECTED

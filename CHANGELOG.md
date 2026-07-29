@@ -6,6 +6,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Make `--account` work. `run()` passed Commander's Command instance to every
+  command body as `globalOpts` and dropped `program.opts()` entirely, so
+  `globalOpts.account` was always `undefined` and the selector was silently
+  inert — **in both positions, on every command, since the first release**. A
+  read command answered with the default channel's data while the caller
+  believed they had selected another, and `logout --account <other>` revoked the
+  default channel's token. `AUTH_ACCOUNT_UNKNOWN` could never fire from the CLI,
+  because the selector never reached the code that raises it.
+- Accept `--account` after the command name as well as before it. Commander does
+  not fold a post-command global option back into the program's options, so the
+  documented "global flags go before the command" rule was load-bearing in a way
+  nothing enforced. Both positions now resolve identically.
+
+### Added
+
+- Record `authorizedAt` on each account — when its refresh token was issued, set
+  at login and preserved across refreshes. `savedAt` is rewritten on every token
+  refresh, so any check on token age read it as "just now" for an actively used
+  install; `doctor`'s `consent_screen` heuristic could therefore never fire.
+
 ## [0.4.0] - 2026-07-29
 
 ### Fixed

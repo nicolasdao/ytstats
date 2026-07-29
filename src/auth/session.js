@@ -172,6 +172,8 @@ export async function login({
     // Record which client issued this token, so a later run with different
     // credentials resolved can say so precisely rather than failing at refresh.
     clientId: credentials.clientId,
+    // Only a login issues a refresh token, so this is the one place it is set.
+    authorizedAt: new Date().toISOString(),
     tokens,
   });
 

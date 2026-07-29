@@ -180,3 +180,37 @@ describe('token store', () => {
     });
   });
 });
+
+describe('authorizedAt tracks token issuance, not last write', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  it('survives a token refresh, while savedAt does not', async () => {
+    // The whole point: savedAt is rewritten on every refresh, so any check on
+    // "how old is this token" that reads savedAt silently never fires for an
+    // actively used install. authorizedAt is set once, at login.
+    saveAccount({ channelId: 'UC1', authorizedAt: '2020-01-01T00:00:00.000Z', tokens: TOKENS_A });
+    const before = loadAccount('UC1');
+
+    await new Promise(r => setTimeout(r, 5));
+    // Mirrors the client.on('tokens') write-back: no authorizedAt supplied.
+    saveAccount({ channelId: 'UC1', tokens: { access_token: 'ya29.rotated' } });
+    const after = loadAccount('UC1');
+
+    expect(after.authorizedAt).toBe('2020-01-01T00:00:00.000Z');
+    expect(after.savedAt).not.toBe(before.savedAt);
+  });
+
+  it('re-login stamps a fresh authorizedAt', () => {
+    saveAccount({ channelId: 'UC1', authorizedAt: '2020-01-01T00:00:00.000Z', tokens: TOKENS_A });
+    saveAccount({ channelId: 'UC1', authorizedAt: '2026-07-29T00:00:00.000Z', tokens: TOKENS_B });
+    expect(loadAccount('UC1').authorizedAt).toBe('2026-07-29T00:00:00.000Z');
+  });
+
+  it('reads null for accounts stored before the field existed', () => {
+    saveAccount({ channelId: 'UC1', tokens: TOKENS_A });
+    expect(loadAccount('UC1').authorizedAt).toBeNull();
+    expect(listAccounts()[0].authorizedAt).toBeNull();
+  });
+});
