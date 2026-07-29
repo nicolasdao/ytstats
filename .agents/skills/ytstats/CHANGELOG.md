@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.0] - 2026-07-29
+
+### Added
+- Explain the two Google policies that make a previously working setup fail with no obvious cause: OAuth clients unused for six months are deleted automatically (from October 2025), and the client secret has been non-re-downloadable since June 2025. Both present as `AUTH_CLIENT_ID_INVALID` or a browser "Access blocked", naming neither cause, so the user assumes they broke something.
+- Never tell a user to re-download an existing client's JSON — it is no longer possible. They add a new secret or create a new client.
+
+### Changed
+- Require `ytstats` 0.4.0 or newer. The skill reads setup steps and console URLs out of the CLI's diagnostics, and earlier versions emit console paths Google has retired — so an older CLI would have the skill relaying dead links.
+
 ## [0.4.0] - 2026-07-29
 
 ### Added

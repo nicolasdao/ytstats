@@ -73,13 +73,17 @@ All three must be enabled in the **same project** that issues your OAuth client.
 
 ### 3. Configure the OAuth consent screen
 
-<https://console.cloud.google.com/apis/credentials/consent> — choose **External**, fill in the app name and your email, and add your own Google account as a **test user**.
+<https://console.cloud.google.com/auth/audience> — choose **External**, fill in the app name and your email, and add your own Google account as a **test user**.
+
+Google split this into three pages under *Google Auth Platform*: **Branding**, **Audience** (the link above), and **Data Access** (`/auth/scopes`, where scopes live). You do not need to add scopes by hand — `ytstats` requests its three read-only scopes at login.
 
 > **Publish it to Production when you're done.** While the consent screen is in *Testing*, Google expires refresh tokens after **7 days** and you'll be logging in every week. Publishing (you'll click past an "unverified app" warning once) stops that.
 
 ### 4. Create the OAuth client
 
-<https://console.cloud.google.com/apis/credentials> → **Create credentials → OAuth client ID → Application type: Desktop app**. Download the JSON.
+<https://console.cloud.google.com/auth/clients> → **Create client → Application type: Desktop app**. Download the JSON.
+
+> **Download it right then.** Since June 2025 the client secret is shown only at creation — afterwards the console displays just its last four characters, and there is no re-download. If you lose the file you add a new secret or create a new client.
 
 > A **service account will not work** — not with any amount of configuration. Service accounts have no YouTube channel, so Google rejects them with `NoLinkedYouTubeAccount`. This is [documented](https://developers.google.com/youtube/v3/guides/authentication) and there is no workaround. You need an OAuth client ID.
 

@@ -110,9 +110,11 @@ ytstats status
 
 Reports who is signed in and where configuration lives. Takes no flags and needs no authentication. This is the "who am I" command.
 
-Returns `{ authenticated, configDir, credentialSource, clientId, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, and `isDefault` — never token material. `setupGuide` appears only when no account is signed in.
+Returns `{ authenticated, configDir, credentialSource, clientId, project, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, and `isDefault` — never token material. `setupGuide` appears only when no account is signed in.
 
 `credentialSource` says *where* the OAuth client came from (a path, `environment`, or `stored`); `clientId` says *which* client that turned out to be. Both are `null` when no credentials resolve. Client IDs are public by OAuth design — only the secret is sensitive — so neither field is redacted.
+
+`project` is `{ id, number, consoleUrl }` — which Google Cloud project these credentials belong to. `number` is the leading segment of the client ID and is always available; `id` is the human-readable project id, present only when the original `client_secret.json` carried it. `consoleUrl` is pre-pinned with `?project=`, because a bare console link opens whichever project the browser last used — very often the wrong one for anyone signed into several accounts.
 
 Comparing the top-level `clientId` against an account's `clientId` tells you whether that channel's stored token was issued by the client currently resolving. A disagreement is what [`AUTH_CLIENT_MISMATCH`](output-contract.md#diagnostic-catalog) reports on the next authenticated command.
 

@@ -9,6 +9,8 @@ import {
   loadStoredCredentials,
   clearCredentials,
   discoverClientSecretFile,
+  projectNumberFromClientId,
+  consoleUrl,
 } from '../../src/auth/credentials.js';
 import { ERROR_CODES } from '../../src/errors.js';
 
@@ -38,6 +40,8 @@ describe('parseClientSecret', () => {
     expect(parseClientSecret(INSTALLED)).toEqual({
       clientId: '123-abc.apps.googleusercontent.com',
       clientSecret: 'GOCSPX-topsecret',
+      // Google's Desktop-app download usually carries project_id; this fixture omits it.
+      projectId: null,
     });
   });
 
@@ -49,6 +53,7 @@ describe('parseClientSecret', () => {
     expect(parseClientSecret({ client_id: 'x', client_secret: 'y' })).toEqual({
       clientId: 'x',
       clientSecret: 'y',
+      projectId: null,
     });
   });
 
@@ -240,5 +245,61 @@ describe('stored credential lifecycle', () => {
         && fs.readFileSync(full, 'utf-8').includes('super-secret-value');
     });
     expect(hits).toEqual(['credentials.json']);
+  });
+});
+
+describe('project identity', () => {
+  let tmp, cwd;
+  beforeEach(() => {
+    tmp = useTempConfigDir();
+    cwd = fs.mkdtempSync(path.join(tmp.dir, 'cwd-'));
+  });
+  afterEach(() => tmp.cleanup());
+
+  it('keeps project_id from the file Google issues', () => {
+    const file = writeSecretFile(cwd, 'with-project.json', {
+      installed: {
+        client_id: '76030824516-abc.apps.googleusercontent.com',
+        client_secret: 'GOCSPX-x',
+        project_id: 'youtube-analytics-491713',
+      },
+    });
+    expect(resolveCredentials({ clientSecretPath: file, env: {}, cwd }).projectId)
+      .toBe('youtube-analytics-491713');
+  });
+
+  it('derives the project number from the client ID', () => {
+    // The leading segment of every client ID is the Google Cloud project number,
+    // so the project is recoverable even with no file and no stored projectId.
+    expect(projectNumberFromClientId('76030824516-abc.apps.googleusercontent.com'))
+      .toBe('76030824516');
+    expect(projectNumberFromClientId('not-a-client-id')).toBeNull();
+    expect(projectNumberFromClientId(undefined)).toBeNull();
+  });
+
+  it('pins a console URL to the project, preferring the id over the number', () => {
+    // A bare console URL opens whichever project the browser last used, which
+    // for anyone signed into several accounts is very often the wrong one.
+    expect(consoleUrl('/auth/audience', { projectId: 'my-proj', clientId: '123-a.apps.googleusercontent.com' }))
+      .toBe('https://console.cloud.google.com/auth/audience?project=my-proj');
+    expect(consoleUrl('/auth/audience', { clientId: '76030824516-a.apps.googleusercontent.com' }))
+      .toBe('https://console.cloud.google.com/auth/audience?project=76030824516');
+  });
+
+  it('falls back to an unpinned URL when nothing identifies the project', () => {
+    expect(consoleUrl('/auth/audience', {})).toBe('https://console.cloud.google.com/auth/audience');
+  });
+
+  it('survives credentials stored before projectId existed', () => {
+    // saveCredentials wrote no projectId historically; the number must still resolve.
+    saveCredentials({ clientId: '76030824516-old.apps.googleusercontent.com', clientSecret: 's' });
+    const got = resolveCredentials({ env: {}, cwd });
+    expect(got.projectId).toBeNull();
+    expect(projectNumberFromClientId(got.clientId)).toBe('76030824516');
+  });
+
+  it('round-trips projectId through save and resolve', () => {
+    saveCredentials({ clientId: '1-a.apps.googleusercontent.com', clientSecret: 's', projectId: 'proj-x' });
+    expect(resolveCredentials({ env: {}, cwd }).projectId).toBe('proj-x');
   });
 });

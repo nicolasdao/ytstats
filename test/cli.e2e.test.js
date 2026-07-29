@@ -274,7 +274,7 @@ describe('ytstats CLI (end to end)', () => {
       const consent = JSON.parse(stdout).data.checks.find(c => c.id === 'consent_screen');
       expect(consent).toBeDefined();
       expect(consent.status).toBe('unknown');
-      expect(consent.detail).toMatch(/credentials\/consent/);
+      expect(consent.detail).toMatch(/auth\/audience/);
     });
 
     it('an unknown check never drags down the health verdict', async () => {

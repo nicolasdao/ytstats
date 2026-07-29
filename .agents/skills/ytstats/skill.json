@@ -1,6 +1,6 @@
 {
 	"name": "ytstats",
-	"version": "0.4.0",
+	"version": "0.5.0",
 	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 22 commands, the JSON envelope, and interpretation traps.",
 	"type": "skill",
 	"authors": ["Nicolas Dao <nicolas.dao@gmail.com>"],
@@ -9,8 +9,8 @@
 	"dependencies": {},
 	"systemDependencies": {
 		"ytstats": {
-			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.3.0 or newer is required — the setup flow depends on doctor probing all three APIs and reporting the consent screen.",
-			"version": ">=0.3.0",
+			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.4.0 or newer is required — the skill reads setup steps and console URLs from the CLI diagnostics, and earlier versions emit console paths Google has retired.",
+			"version": ">=0.4.0",
 			"check": "npx --yes ytstats --version",
 			"install": {
 				"darwin": "npm install -g ytstats",

@@ -80,7 +80,7 @@ Each entry in `errors` and `warnings` answers four questions — what happened, 
     "summary": "Sign in again, then publish your consent screen to Production.",
     "steps": ["Run: ytstats login", "…"],
     "commands": [{ "run": "ytstats login", "description": "Re-authorize this machine" }],
-    "docs": ["https://console.cloud.google.com/apis/credentials/consent"]
+    "docs": ["https://console.cloud.google.com/auth/audience"]
   },
   "context": { "flag": "--start", "value": "01/01/2026", "expected": "YYYY-MM-DD" }
 }

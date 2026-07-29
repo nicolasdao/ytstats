@@ -199,6 +199,8 @@ When `credentials` fails, `blocking[0].remediation.steps` is the complete seven-
 
 Whenever that check is `unknown`, say so explicitly and give them the link:
 
-> One step I cannot verify: your OAuth consent screen must be published to **Production**. In Testing, Google expires your login after 7 days. Check it reads "In production" at <https://console.cloud.google.com/apis/credentials/consent>
+> One step I cannot verify: your OAuth consent screen must be published to **Production**. In Testing, Google expires your login after 7 days. Check it reads "In production" at the URL below.
+
+**Give them the pinned link, never a bare one.** `doctor`'s `consent_screen` detail already contains a URL with `?project=` appended, and `ytstats status` exposes the same at `.data.project.consoleUrl`. Use it verbatim. A bare console URL opens whichever project the browser last used, so someone signed into several accounts or projects can end up confidently checking the wrong one — and concluding they are fine when they are not.
 
 Do not let it pass silently just because `healthy` is `true`. It flips to `pass` on its own once a working token is older than 7 days.

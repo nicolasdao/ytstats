@@ -29,7 +29,13 @@ export function parseClientSecret(raw) {
   if (!clientId) throw fail(DIAGNOSTICS.AUTH_CREDENTIALS_MALFORMED, { detail: 'No client_id in the file' });
   if (!clientSecret) throw fail(DIAGNOSTICS.AUTH_CREDENTIALS_MALFORMED, { detail: 'No client_secret in the file' });
 
-  return { clientId, clientSecret };
+  // Google includes project_id in the file it hands out. Keeping it turns every
+  // console link into a project-specific one — a bare console URL resolves to
+  // whichever project the browser happens to have active, which for anyone
+  // signed into several accounts or projects is very often the wrong one.
+  const projectId = node.project_id ?? node.projectId ?? null;
+
+  return { clientId, clientSecret, projectId };
 }
 
 function readClientSecretFile(file, flag = '--client-secret') {
@@ -116,15 +122,47 @@ export function loadStoredCredentials() {
   return stored;
 }
 
-export function saveCredentials({ clientId, clientSecret, source }) {
+export function saveCredentials({ clientId, clientSecret, projectId, source }) {
   writeJson(CREDENTIALS_FILE, {
     version: 1,
     clientId,
     clientSecret,
+    projectId: projectId ?? null,
     source: source ?? 'login',
     savedAt: new Date().toISOString(),
   });
-  return { clientId, clientSecret };
+  return { clientId, clientSecret, projectId: projectId ?? null };
+}
+
+/**
+ * The Google Cloud project number is the leading segment of every client ID
+ * (`<project-number>-<hash>.apps.googleusercontent.com`), so it is always
+ * recoverable even for credentials stored before projectId was kept, and for
+ * the env-var pair where no file exists to read it from.
+ */
+export function projectNumberFromClientId(clientId) {
+  const m = /^(\d+)-/.exec(String(clientId ?? ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * A Google Cloud console URL pinned to a specific project.
+ *
+ * Without the parameter the console resolves to whatever project the browser
+ * last used, which is a coin flip for anyone with several.
+ *
+ * `?project=<PROJECT_ID>` is documented and reliable. The numeric project number
+ * is a **best-effort fallback**: Google documents no support for it, so the
+ * console may ignore it and fall back to the last-used project — which is
+ * exactly where an unpinned link lands anyway, so the fallback is never worse
+ * than omitting the parameter. It applies only to credentials stored before
+ * `projectId` was kept, and to the env-var pair where no file exists to read it
+ * from; a fresh `login` records the id and takes the reliable path.
+ */
+export function consoleUrl(path, { projectId, clientId } = {}) {
+  const base = `https://console.cloud.google.com${path}`;
+  const project = projectId || projectNumberFromClientId(clientId);
+  return project ? `${base}?project=${encodeURIComponent(project)}` : base;
 }
 
 export function clearCredentials() {
@@ -153,9 +191,11 @@ export function resolveCredentials({ clientSecretPath, env = process.env, cwd = 
   }
 
   if (env.YTSTATS_CLIENT_ID && env.YTSTATS_CLIENT_SECRET) {
+    // No file to read project_id from; the number still falls out of the client ID.
     return {
       clientId: env.YTSTATS_CLIENT_ID,
       clientSecret: env.YTSTATS_CLIENT_SECRET,
+      projectId: null,
       source: 'environment',
     };
   }
@@ -171,7 +211,13 @@ export function resolveCredentials({ clientSecretPath, env = process.env, cwd = 
 
   const stored = loadStoredCredentials();
   if (stored) {
-    return { clientId: stored.clientId, clientSecret: stored.clientSecret, source: 'stored' };
+    return {
+      clientId: stored.clientId,
+      clientSecret: stored.clientSecret,
+      // Absent on credentials saved before this field existed; the number still resolves.
+      projectId: stored.projectId ?? null,
+      source: 'stored',
+    };
   }
 
   const discovered = discoverClientSecretFile(cwd);

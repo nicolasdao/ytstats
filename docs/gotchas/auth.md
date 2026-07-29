@@ -24,6 +24,26 @@ The only service-account-based YouTube API is the Content ID API, which is partn
 
 **Where handled:** `parseClientSecret()` in `src/auth/credentials.js` detects `type: 'service_account'` and fails with `AUTH_SERVICE_ACCOUNT`, marked `recoverable: false` so an agent stops instead of retrying forever.
 
+## An unused OAuth client is deleted after six months
+
+Since 27 October 2025, Google automatically deletes OAuth clients that have been inactive for **six months**, with an email warning 30 days beforehand. Deleted clients are restorable for 30 days after that.
+
+This is a sharper hazard for `ytstats` than for a typical app, because the usage pattern invites it: a personal analytics CLI you reach for occasionally can easily go six months untouched, and the warning email goes to the project contact address — often one nobody reads. The symptom is a client that simply stops existing, which surfaces as `AUTH_CLIENT_ID_INVALID` or a browser "Access blocked" rather than anything naming deletion.
+
+There is no defence in code. The mitigation is knowing it exists: run `ytstats doctor` occasionally, and keep the Google Cloud project's contact email one you actually read.
+
+**Where handled:** nowhere — this is a Google-side policy. Documented here so the failure is recognisable.
+
+## The client secret is shown once and never again
+
+Since June 2025 the client secret is visible and downloadable **only at the moment the OAuth client is created**. Afterwards the console displays just its last four characters.
+
+So "re-download the client JSON" — which used to be the standard recovery for a corrupt or mislaid credential file — is no longer possible. The recovery is to add a *new* secret to the existing client, or create a new client, and download at that moment.
+
+Any remediation text that tells a user to re-download an existing client's JSON is now wrong, and the setup walkthrough has to say "download it now" rather than "download the JSON" as though it could be fetched later.
+
+**Where handled:** the `AUTH_CLIENT_ID_SUSPICIOUS` remediation steps and `SETUP_STEPS` in `src/diagnostics.js`.
+
 ## Testing-mode consent screens expire tokens weekly
 
 While an OAuth consent screen is in **Testing** status, Google expires refresh tokens after **7 days**. The symptom is re-authenticating every week, surfacing as `invalid_grant`.

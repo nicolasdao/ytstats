@@ -38,7 +38,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 290,
+      "line_count": 294,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -182,7 +182,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 307,
+      "line_count": 309,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -228,7 +228,7 @@
         "Running several OAuth clients side by side",
         "Not committing credentials"
       ],
-      "line_count": 163,
+      "line_count": 164,
       "links_to": [
         "docs/auth.md",
         "docs/gotchas/config-storage.md",
@@ -339,6 +339,8 @@
       "headings": [
         "Authentication Gotchas",
         "Service accounts can never be used",
+        "An unused OAuth client is deleted after six months",
+        "The client secret is shown once and never again",
         "Testing-mode consent screens expire tokens weekly",
         "A bad client ID fails in the browser, not the API",
         "A merely unusual client ID must not lock anyone out",
@@ -357,7 +359,7 @@
         "Logout removes local tokens even when revocation fails",
         "A read-only config dir must not break a working command"
       ],
-      "line_count": 157,
+      "line_count": 177,
       "links_to": [
         "docs/auth.md",
         "docs/gotchas/config-storage.md"

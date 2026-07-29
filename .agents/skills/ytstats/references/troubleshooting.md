@@ -23,7 +23,7 @@ Respect both and you never loop pointlessly. `recoverable: false` means stop. `r
 | `AUTH_CLIENT_MISMATCH` | This channel's token was issued by a different OAuth client than the one now resolving. See below |
 | `AUTH_CONSENT_DECLINED` | Consent dismissed or a scope refused. **Retryable** — offer to run `login` again |
 | `AUTH_TIMEOUT` | The callback never arrived. Usually Google showed "Access blocked" in the browser, which a retry cannot fix. Check the OAuth client, not the network |
-| `AUTH_CLIENT_ID_INVALID` | Client ID does not end in `.apps.googleusercontent.com` |
+| `AUTH_CLIENT_ID_INVALID` | Client ID does not end in `.apps.googleusercontent.com`. Also consider the client being **gone** — see below |
 | `AUTH_SERVICE_ACCOUNT` | **Not recoverable.** Service accounts own no YouTube channel and there is no workaround. The user needs an OAuth client ID, Desktop app type |
 | `AUTH_CREDENTIALS_NOT_FOUND` | The supplied credential path could not be opened. `context.flag` names which source — `--client-secret` or `YTSTATS_CREDENTIALS_FILE` — so say which one is wrong rather than guessing |
 | `AUTH_CREDENTIALS_MALFORMED` | The file opened but is not the JSON Google produces for an OAuth client. Usually the wrong file entirely, or a truncated download |
@@ -59,6 +59,15 @@ Do not "fix" this by re-running the same command. It is not retryable.
 `INPUT_INVALID_DATE`, `INPUT_INVALID_RANGE`, `INPUT_INVALID_CHOICE`, `INPUT_INVALID_VALUE`, `INPUT_MISSING_REQUIRED`, `INPUT_UNKNOWN_COMMAND`, `INPUT_UNKNOWN_OPTION`.
 
 All are the caller's fault and all are fixable without touching the user's account. `context.allowed` carries the valid set where one exists. Input is validated **before** authentication and **every** problem is reported at once, so one correction pass fixes everything rather than discovering a second problem after fixing the first.
+
+## A setup that worked before and now does not
+
+Two Google policies delete or hide things behind the user's back, and both present as a setup that mysteriously stopped working rather than as anything naming the cause:
+
+- **OAuth clients unused for six months are deleted automatically** (policy from October 2025), with a warning email 30 days ahead to the project contact address — often one nobody reads. A personal analytics CLI is exactly the usage pattern that goes six months untouched. The symptom is `AUTH_CLIENT_ID_INVALID`, or a browser "Access blocked" that ends in `AUTH_TIMEOUT`. Deleted clients are restorable for 30 days.
+- **The client secret cannot be re-downloaded.** Since June 2025 it is shown only when the client is created; afterwards the console displays just its last four characters. Never tell a user to re-download an existing client's JSON — it is not possible. They add a new secret to the client, or create a new client, and download at that moment.
+
+When a previously working setup fails at the credential layer, raise the six-month deletion explicitly. The user will otherwise assume they broke something.
 
 ## Config — exit 1
 

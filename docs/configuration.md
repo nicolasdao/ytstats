@@ -51,12 +51,13 @@ The BYO OAuth client, saved so later commands need no flags — and because Goog
   "version": 1,
   "clientId": "123456789012-abc.apps.googleusercontent.com",
   "clientSecret": "GOCSPX-…",
+  "projectId": "youtube-analytics-491713",
   "source": "/Users/you/Downloads/client_secret_1234.json",
   "savedAt": "2026-07-27T10:00:00.000Z"
 }
 ```
 
-`source` records where the credentials originally came from, for display only.
+`source` records where the credentials originally came from, for display only. `projectId` is copied from the `project_id` Google includes in the downloaded file, so console links can be pinned to the right project. It is `null` for credentials saved before the field existed and for the env-var pair; the project *number* still falls out of the client ID in both cases.
 
 ### tokens.json
 

@@ -8,7 +8,13 @@ import { EXIT_CODES, YtStatsError, ERROR_CODES, SETUP_GUIDE, fail } from './erro
 import { diagnose, DIAGNOSTICS, EXIT } from './diagnostics.js';
 import { resolveDateRange } from './dates.js';
 import { getAuthenticatedClient, login, logout, identifyLegacyTokens } from './auth/session.js';
-import { resolveCredentials, saveCredentials, validateClientId } from './auth/credentials.js';
+import {
+  resolveCredentials, saveCredentials, validateClientId,
+  projectNumberFromClientId, consoleUrl,
+} from './auth/credentials.js';
+
+/** Fallback when no credentials resolved, so no project is known yet. */
+const CONSOLE_HOST = 'https://console.cloud.google.com';
 import { listAccounts, setDefaultAccount, migrateLegacyTokens } from './auth/tokens.js';
 import { configDir, writeJson, removeFile } from './config/store.js';
 import { diagnoseGoogleError } from './errors.js';
@@ -197,6 +203,7 @@ export function buildProgram(deps = {}) {
       const accounts = listAccounts();
       let credentialSource = null;
       let clientId = null;
+      let project = null;
       try {
         // A client ID is public by OAuth design — only the secret is sensitive —
         // and with five resolution sources, "which one did it pick" is not
@@ -204,6 +211,14 @@ export function buildProgram(deps = {}) {
         const credentials = resolveCredentials();
         credentialSource = credentials.source;
         clientId = credentials.clientId;
+        // Which Google Cloud project these credentials belong to. Otherwise the
+        // only way to find out is decoding the client ID by hand, and every
+        // console link is a guess for anyone with more than one project.
+        project = {
+          id: credentials.projectId ?? null,
+          number: projectNumberFromClientId(clientId),
+          consoleUrl: consoleUrl('/auth/audience', credentials),
+        };
       } catch {
         // Not configured yet; reported as null below.
       }
@@ -212,6 +227,7 @@ export function buildProgram(deps = {}) {
         configDir: configDir(),
         credentialSource,
         clientId,
+        project,
         accounts,
         setupGuide: accounts.length === 0 ? SETUP_GUIDE : undefined,
       };
@@ -343,9 +359,15 @@ export function buildProgram(deps = {}) {
         record('consent_screen', 'OAuth consent screen published to Production', true,
           `proven — a token ${Math.floor(ageDays)} days old still works, which Testing mode would have expired`);
       } else {
+        // Pin the link to this project. A bare console URL opens whichever
+        // project the browser last used, so telling someone to "check the
+        // consent screen" can send them to the wrong one entirely.
+        const consentUrl = credentials
+          ? consoleUrl('/auth/audience', credentials)
+          : `${CONSOLE_HOST}/auth/audience`;
         record('consent_screen', 'OAuth consent screen published to Production', true,
           'cannot be verified — no API exposes this. In Testing, Google expires refresh tokens after 7 days. '
-          + 'Confirm the status reads "In production" at https://console.cloud.google.com/apis/credentials/consent',
+          + `Confirm the status reads "In production" at ${consentUrl}`,
           null, 'unknown');
       }
 

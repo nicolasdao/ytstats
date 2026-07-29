@@ -58,7 +58,7 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 | `use <channelId or @handle>` | Set the default channel. Fails if not signed in |
 | `import-legacy <tokensFile> [-c <path>]` | One-time import of a pre-ytstats token file |
 
-`status` returns `{ authenticated, configDir, credentialSource, clientId, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, `isDefault` — never token material.
+`status` returns `{ authenticated, configDir, credentialSource, clientId, project, accounts[], setupGuide? }`. `project` is `{ id, number, consoleUrl }` — which Google Cloud project the credentials belong to, with a console URL already pinned via `?project=`. Prefer it over composing console links yourself. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, `isDefault` — never token material.
 
 `doctor` checks, in dependency order: `config_writable`, `credentials`, `signed_in`, then one probe per API — `api_reachable` (Data v3), `api_analytics` (Analytics v2), `api_reporting` (Reporting v1) — and finally `consent_screen`. The three API probes are skipped when earlier checks failed.
 

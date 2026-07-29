@@ -29,8 +29,9 @@ const SETUP_STEPS = [
   `Enable YouTube Data API v3: ${CONSOLE}/apis/library/youtube.googleapis.com`,
   `Enable YouTube Analytics API: ${CONSOLE}/apis/library/youtubeanalytics.googleapis.com`,
   `Enable YouTube Reporting API: ${CONSOLE}/apis/library/youtubereporting.googleapis.com`,
-  `Configure the OAuth consent screen (External), add yourself as a test user, then publish it to Production: ${CONSOLE}/apis/credentials/consent`,
-  `Create credentials > OAuth client ID > Application type "Desktop app", then download the JSON: ${CONSOLE}/apis/credentials`,
+  `Configure the consent screen audience (External), add yourself as a test user, then publish to Production: ${CONSOLE}/auth/audience`,
+  `Create an OAuth client > Application type "Desktop app": ${CONSOLE}/auth/clients`,
+  'Download the client JSON immediately — since June 2025 the secret is shown only at creation, and afterwards the console displays just its last four characters. It cannot be re-downloaded.',
   'Run: ytstats login --client-secret /path/to/client_secret_XXX.json',
 ];
 
@@ -76,7 +77,7 @@ export const DIAGNOSTICS = {
       summary: 'Create a Google Cloud OAuth client (Desktop app) and pass it to ytstats login.',
       steps: SETUP_STEPS,
       commands: [LOGIN_CMD, DOCTOR_CMD],
-      docs: [SETUP_DOC, `${CONSOLE}/apis/credentials`],
+      docs: [SETUP_DOC, `${CONSOLE}/auth/clients`],
     },
   }),
 
@@ -122,15 +123,16 @@ export const DIAGNOSTICS = {
       summary: 'Sign in again, then publish your consent screen to Production so it stops recurring.',
       steps: [
         'Run: ytstats login',
-        `Then fix the root cause: open ${CONSOLE}/apis/credentials/consent`,
+        `Then fix the root cause: open ${CONSOLE}/auth/audience`,
         'If Publishing status is "Testing", click "PUBLISH APP" and confirm.',
-        'Publishing removes the 7-day refresh token expiry. Verification is not required for personal use — you click past a one-time "unverified app" warning.',
+        'Then run ytstats login again. Google does not document whether a token issued while in Testing keeps its 7-day expiry after publishing, so re-authorizing is the only way to be certain you hold a long-lived one.',
+        'Verification is not required for personal use — under 100 users you click past a one-time "unverified app" warning. Publishing does not list your app anywhere.',
       ],
       commands: [
         { run: 'ytstats login', description: 'Re-authorize this machine' },
         DOCTOR_CMD,
       ],
-      docs: [`${CONSOLE}/apis/credentials/consent`],
+      docs: [`${CONSOLE}/auth/audience`],
     },
   }),
 
@@ -220,10 +222,10 @@ export const DIAGNOSTICS = {
       steps: [
         'Run: ytstats login',
         'Approve every requested scope — all three are read-only.',
-        `If the consent screen refuses your account, add it as a test user: ${CONSOLE}/apis/credentials/consent`,
+        `If the consent screen refuses your account, add it as a test user: ${CONSOLE}/auth/audience`,
       ],
       commands: [{ run: 'ytstats login', description: 'Retry authorization' }],
-      docs: [`${CONSOLE}/apis/credentials/consent`],
+      docs: [`${CONSOLE}/auth/audience`],
     },
   }),
 
@@ -248,8 +250,8 @@ export const DIAGNOSTICS = {
         'retrying the same command will keep timing out.',
       steps: [
         'If the browser showed "Access blocked: Authorization Error": the OAuth client is the problem, not the timeout.',
-        `  - Confirm the client ID still exists and is of type "Desktop app": ${CONSOLE}/apis/credentials`,
-        `  - Confirm the OAuth consent screen is configured and you are a test user (or it is published): ${CONSOLE}/apis/credentials/consent`,
+        `  - Confirm the client ID still exists and is of type "Desktop app": ${CONSOLE}/auth/clients`,
+        `  - Confirm the OAuth consent screen is configured and you are a test user (or it is published): ${CONSOLE}/auth/audience`,
         '  - Re-download the client JSON and pass it again with --client-secret.',
         'If the browser never opened, run: ytstats login --no-browser',
         'If you simply walked away, re-run: ytstats login',
@@ -259,7 +261,7 @@ export const DIAGNOSTICS = {
         { run: 'ytstats login --no-browser', description: 'Paste-the-URL flow for headless machines' },
         DOCTOR_CMD,
       ],
-      docs: [`${CONSOLE}/apis/credentials`, `${CONSOLE}/apis/credentials/consent`],
+      docs: [`${CONSOLE}/auth/clients`, `${CONSOLE}/auth/audience`],
     },
   }),
 
@@ -277,13 +279,13 @@ export const DIAGNOSTICS = {
     remediation: {
       summary: 'Download the real OAuth client JSON from Google Cloud and pass that file unmodified.',
       steps: [
-        `Open ${CONSOLE}/apis/credentials`,
+        `Open ${CONSOLE}/auth/clients`,
         'Under "OAuth 2.0 Client IDs", pick the Desktop app client (create one if there is none).',
         'Click the download icon — do not hand-edit the file.',
         'Run: ytstats login --client-secret /path/to/that/file.json',
       ],
       commands: [LOGIN_CMD, DOCTOR_CMD],
-      docs: [`${CONSOLE}/apis/credentials`],
+      docs: [`${CONSOLE}/auth/clients`],
     },
   }),
 
@@ -300,13 +302,15 @@ export const DIAGNOSTICS = {
       'the browser, this is why.',
     cause: 'A trimmed, placeholder, or legacy client ID.',
     remediation: {
-      summary: 'Proceeding anyway — but if the browser shows "Access blocked", re-download the client JSON.',
+      summary: 'Proceeding anyway — but if the browser shows "Access blocked", the client JSON is suspect.',
       steps: [
-        `If sign-in fails, re-download the OAuth client from ${CONSOLE}/apis/credentials`,
+        `Check the client at ${CONSOLE}/auth/clients — it must exist and be of type "Desktop app".`,
+        'Since June 2025 the client secret is downloadable only at creation; afterwards the console shows only its last four characters. There is no re-download.',
+        'If the file is wrong or lost, add a new secret to the existing client (or create a new client) and download it at that moment.',
         'Pass the downloaded file unmodified to --client-secret.',
       ],
       commands: [LOGIN_CMD],
-      docs: [`${CONSOLE}/apis/credentials`],
+      docs: [`${CONSOLE}/auth/clients`],
     },
   }),
 
@@ -342,7 +346,7 @@ export const DIAGNOSTICS = {
     remediation: {
       summary: 'Create an OAuth client ID of type "Desktop app" instead. Do not retry with a service account.',
       steps: [
-        `Open ${CONSOLE}/apis/credentials`,
+        `Open ${CONSOLE}/auth/clients`,
         'Create credentials > OAuth client ID > Application type: Desktop app.',
         'Download that JSON and pass it to ytstats login --client-secret.',
       ],
@@ -389,12 +393,12 @@ export const DIAGNOSTICS = {
     remediation: {
       summary: 'Re-download the OAuth client JSON and pass that exact file.',
       steps: [
-        `Open ${CONSOLE}/apis/credentials`,
+        `Open ${CONSOLE}/auth/clients`,
         'Find your OAuth 2.0 Client ID (Desktop app) and click the download icon.',
         'Pass that file: ytstats login --client-secret /path/to/downloaded.json',
       ],
       commands: [LOGIN_CMD],
-      docs: [`${CONSOLE}/apis/credentials`],
+      docs: [`${CONSOLE}/auth/clients`],
     },
   }),
 
