@@ -1,6 +1,6 @@
 {
 	"lockVersion": 2,
-	"generatedAt": "2026-07-29T04:24:24.631Z",
+	"generatedAt": "2026-07-29T06:13:56.560Z",
 	"skills": {
 		"happyskillsai/happyskills": {
 			"version": "2.8.0",
@@ -291,12 +291,12 @@
 			"type": "skill"
 		},
 		"nicolasdao/ytstats": {
-			"version": "0.3.0",
-			"ref": "refs/tags/v0.3.0",
-			"commit": "6d8d09d29eaaf799311ad1d95cf2d097c4c7c397762d1e3b714b396432986c96",
-			"integrity": "sha256-dc6a77d693dc50103b05dbd440fa3a646f9607949a716bf23713b70b422c6a53",
-			"base_commit": "6d8d09d29eaaf799311ad1d95cf2d097c4c7c397762d1e3b714b396432986c96",
-			"base_integrity": "sha256-dc6a77d693dc50103b05dbd440fa3a646f9607949a716bf23713b70b422c6a53",
+			"version": "0.4.0",
+			"ref": "refs/tags/v0.4.0",
+			"commit": "df6bec17226d950bc17c08338c579cd23d492c2b56db7d5a45f307f0fc1905e3",
+			"integrity": "sha256-779644b952affd723a06968b81f544cfd7856ba2d2b7f546c6f51364ce48a3a7",
+			"base_commit": "df6bec17226d950bc17c08338c579cd23d492c2b56db7d5a45f307f0fc1905e3",
+			"base_integrity": "sha256-779644b952affd723a06968b81f544cfd7856ba2d2b7f546c6f51364ce48a3a7",
 			"requested_by": [
 				"__root__"
 			],
