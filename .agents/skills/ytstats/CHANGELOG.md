@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0] - 2026-07-29
+
+### Changed
+- Require `ytstats` 0.5.0 or newer. Before it the `--account` selector was silently dropped before reaching the code that validates it, so every command answered with the **default** channel while reporting success. The skill routes "switch channel" and per-invocation selection through that flag, so on any earlier CLI it was confidently steering agents to the wrong channel's data.
+- Global flags are no longer position-sensitive — `--account` resolves identically before or after the command name from 0.5.0 onward.
+
+### Added
+- Tell agents to check `ytstats --version` first when reported figures look like the wrong channel, since the pre-0.5.0 symptom is plausible-looking data rather than an error.
+- Note `authorizedAt` on each account — when its refresh token was issued — and that `savedAt` is only the last write, moving on every refresh.
+
 ## [0.5.0] - 2026-07-29
 
 ### Added

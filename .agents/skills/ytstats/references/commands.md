@@ -1,12 +1,12 @@
 # Command Reference
 
-Every `ytstats` command, its flags, and what it returns. Global flags go **before** the command name.
+Every `ytstats` command, its flags, and what it returns. Global flags may be given **before or after** the command name — both resolve identically from 0.5.0 onward.
 
 ## Global flags
 
 | Flag | Default | Effect |
 |---|---|---|
-| `-a, --account <channel>` | the default account | Channel id, `@handle`, or channel title. Never falls back silently on a miss |
+| `-a, --account <channel>` | the default account | Channel id, `@handle`, or channel title. Never falls back silently on a miss — an unrecognised value is `AUTH_ACCOUNT_UNKNOWN`. **Requires 0.5.0+**, see below |
 | `--compact` | off | Single-line JSON |
 | `-q, --quiet` | off | Suppress stderr progress. stdout is unaffected |
 | `-V, --version` | — | Print version, exit 0 |
@@ -37,6 +37,8 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 
 `ytstats status` reports which one won as `credentialSource` (a path, `environment`, or `stored`) and the resolved `clientId`.
 
+**`--account` did nothing before 0.5.0.** The CLI dropped the selector before it reached the code that validates it, so every command answered with the **default** channel while reporting success — wrong numbers presented as correct, and `logout --account <other>` revoked the default channel's token. If a user reports figures that look like the wrong channel, check `ytstats --version` before anything else. On 0.5.0+ an unrecognised selector raises `AUTH_ACCOUNT_UNKNOWN` listing the valid channels, and both flag positions work.
+
 | Variable | Effect |
 |---|---|
 | `YTSTATS_CREDENTIALS_FILE` | Point at a client secret file for this shell, without repeating `--client-secret`. Best when the file already exists on disk — no extracting two fields |
@@ -58,7 +60,7 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 | `use <channelId or @handle>` | Set the default channel. Fails if not signed in |
 | `import-legacy <tokensFile> [-c <path>]` | One-time import of a pre-ytstats token file |
 
-`status` returns `{ authenticated, configDir, credentialSource, clientId, project, accounts[], setupGuide? }`. `project` is `{ id, number, consoleUrl }` — which Google Cloud project the credentials belong to, with a console URL already pinned via `?project=`. Prefer it over composing console links yourself. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, `isDefault` — never token material.
+`status` returns `{ authenticated, configDir, credentialSource, clientId, project, accounts[], setupGuide? }`. `project` is `{ id, number, consoleUrl }` — which Google Cloud project the credentials belong to, with a console URL already pinned via `?project=`. Prefer it over composing console links yourself. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `authorizedAt`, `savedAt`, `isDefault` — never token material. `authorizedAt` is when that account's refresh token was issued; `savedAt` is merely the last write and moves on every token refresh.
 
 `doctor` checks, in dependency order: `config_writable`, `credentials`, `signed_in`, then one probe per API — `api_reachable` (Data v3), `api_analytics` (Analytics v2), `api_reporting` (Reporting v1) — and finally `consent_screen`. The three API probes are skipped when earlier checks failed.
 
