@@ -57,6 +57,24 @@ Use `defaults: { … }` for context values that must appear even when a call sit
 
 Throw it with `fail(DIAGNOSTICS.MY_NEW_CODE, { … })` rather than constructing a `YtStatsError` by hand.
 
+## Keeping the agent skill in sync
+
+The `ytstats` agent skill (`.agents/skills/ytstats/`, published as `nicolasdao/ytstats`) drives the CLI on a user's behalf. It is a **second consumer of the same contracts** as `docs/` — the command surface, the diagnostic codes, the four shapes of `data`, and the values that are correct but read as wrong.
+
+Nothing detects drift between the two. `doc-manifest.json` maps changed source paths to affected docs via `source` globs, but that map covers `README.md` and `docs/**` only; the skill lives outside it. A CLI change therefore updates the docs and silently leaves the skill describing the old behaviour — which is worse than a stale doc, because an agent acts on it.
+
+Check the skill whenever a change touches:
+
+| Change | Skill file to update |
+|---|---|
+| A command, flag, or default | `references/commands.md`, and the routing table in `SKILL.md` |
+| A diagnostic code, or its `recoverable` / `retryable` | `references/troubleshooting.md` |
+| The shape of any command's `data` | the shapes table in `SKILL.md` |
+| A value whose correct reading is non-obvious | `references/interpreting-results.md` |
+| Behaviour a user on an older CLI would see differently | `systemDependencies.ytstats.version` in `skill.json` |
+
+That last row is the load-bearing one. The version floor is the only machine-readable statement of which CLI the skill's guidance is true for. When a release changes behaviour the skill depends on, raise the floor and republish — otherwise the skill keeps claiming to work against versions where it does not. v0.2.1 is the worked example: `reach` returned silently empty CTR on 0.2.0, so a skill declaring `>=0.2.0` would confidently report "no impressions data" to someone who had plenty.
+
 ## The stability contract
 
 **`code` values are public API.** Scripts and agents consuming `ytstats` JSON branch on them. Add new codes freely; never repurpose an existing one, and never delete one without a major version bump.

@@ -20,6 +20,18 @@ That command behaves unlike every other one:
 
 So "what's my CTR" on a channel that has never run `reach` is answered by starting the job and telling the user to come back tomorrow. Do not treat the empty first result as an error, and do not re-run it repeatedly hoping for data — re-running is harmless but changes nothing.
 
+**Rows present but every `impressions` null means an outdated CLI, not an empty channel.** Distinguish the two cases before answering:
+
+| `rows` | `pending` | Means |
+|---|---|---|
+| empty | `true` | Job just created. Real — come back in 24-48h |
+| populated, values present | `false` | Real data |
+| **populated, every `impressions` and `impressionsCtr` null** | `false` | **`ytstats` older than 0.2.1** |
+
+Versions before 0.2.1 read the wrong CSV columns, so every row resolved to `null` while the command still reported `ok: true` with no warning. Nothing distinguishes it from a genuine absence except the shape: a real report never returns hundreds of rows in which *every* impression field is null.
+
+If you see that, check `ytstats --version` and say the CLI needs upgrading. Do **not** report "no impressions data" — the data exists and is being dropped in transit.
+
 ## Retention ratios above 1.0 are correct
 
 A `ratio` of `1.54` at some position means viewers **rewatched that moment** — a loop, common on Shorts. Never clamp it, never call it a bug, never describe it as "over 100% which must be an error." It is the most interesting signal in the curve.

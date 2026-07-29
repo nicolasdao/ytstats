@@ -72,6 +72,20 @@ Four independent checks — config writable, credentials present, signed in, API
 
 Use it whenever the failure is unclear, or before a long unattended run.
 
+## UNEXPECTED usually means an outdated CLI
+
+`UNEXPECTED` is `recoverable: false`, so it stops you — correctly, since it means the CLI hit a condition it could not classify. But before reporting it as a bug, check the version.
+
+Versions before 0.2.1 leaked unclassified errors on two paths that are entirely ordinary:
+
+| Situation | Pre-0.2.1 | 0.2.1 and newer |
+|---|---|---|
+| `import-legacy` with an expired refresh token | `UNEXPECTED` | `AUTH_TOKEN_EXPIRED`, run `login` |
+| `import-legacy` with an unreadable path | `UNEXPECTED` | `INPUT_INVALID_VALUE` |
+| `reach` hitting a transient Google 5xx | `UNEXPECTED` | `API_UNAVAILABLE`, retryable |
+
+An expired token during a migration is the *expected* outcome — people migrate because the old setup went stale — so `UNEXPECTED` there is the CLI misreporting, not a genuine internal fault. On a current CLI, treat `UNEXPECTED` as it is documented: stop, and surface the diagnostic for reporting.
+
 ## Unknown codes
 
 `code` values are public API and new ones are added freely without a major version bump. An unrecognized code is not an error in your handling — fall back to `recoverable`, `retryable`, and `nextSteps[0]`, which are present on every diagnostic.

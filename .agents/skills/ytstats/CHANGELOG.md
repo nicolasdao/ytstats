@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0] - 2026-07-29
+
+### Changed
+- Require `ytstats` 0.2.1 or newer. Versions before that read the wrong CSV columns from the reach report and returned every impression field as `null` while still reporting `ok: true`, so a skill declaring `>=0.2.0` would confidently answer "no impressions data" to someone whose CTR data existed.
+
+### Added
+- Distinguish an outdated CLI from a genuinely empty channel when reading `reach`. Rows present with every `impressions` and `impressionsCtr` null is the pre-0.2.1 bug, not an absence of data — a real report never returns hundreds of rows in which every impression field is null.
+- Explain that `UNEXPECTED` usually means an outdated CLI rather than a genuine internal fault. Before 0.2.1 it leaked on two ordinary paths — an expired `import-legacy` refresh token and a transient Google 5xx during a reach download — which now classify as `AUTH_TOKEN_EXPIRED` and `API_UNAVAILABLE`.
+
 ## [0.1.0] - 2026-07-28
 
 Initial version.

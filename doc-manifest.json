@@ -263,6 +263,7 @@
         "Adding a new dataset",
         "Adding a command",
         "Adding a diagnostic",
+        "Keeping the agent skill in sync",
         "The stability contract",
         "Dependency policy",
         "The gaxios override",
@@ -273,7 +274,7 @@
         "Shipping to production",
         "Documentation"
       ],
-      "line_count": 155,
+      "line_count": 173,
       "links_to": [
         "README.md",
         "docs/architecture.md",
