@@ -61,9 +61,17 @@ Throw it with `fail(DIAGNOSTICS.MY_NEW_CODE, { … })` rather than constructing 
 
 The `ytstats` agent skill (`.agents/skills/ytstats/`, published as `nicolasdao/ytstats`) drives the CLI on a user's behalf. It is a **second consumer of the same contracts** as `docs/` — the command surface, the diagnostic codes, the four shapes of `data`, and the values that are correct but read as wrong.
 
-Nothing detects drift between the two. `doc-manifest.json` maps changed source paths to affected docs via `source` globs, but that map covers `README.md` and `docs/**` only; the skill lives outside it. A CLI change therefore updates the docs and silently leaves the skill describing the old behaviour — which is worse than a stale doc, because an agent acts on it.
+`doc-manifest.json` maps changed source paths to affected docs via `source` globs, but that map covers `README.md` and `docs/**` only; the skill lives outside it. A CLI change therefore updates the docs and silently leaves the skill describing the old behaviour — which is worse than a stale doc, because an agent acts on it.
 
-Check the skill whenever a change touches:
+Run the coverage check rather than relying on memory:
+
+```bash
+bash .agents/skills/release-cli/scripts/skill-sync-check.sh
+```
+
+It lists any command, diagnostic code, or environment variable the CLI has and the skill never mentions, and always exits 0 — it warns, it never blocks. `release-cli` runs it automatically at Step 4b of every release.
+
+Coverage is only the mechanical half. It proves an identifier is *mentioned*; it cannot tell whether what the skill says about it is still true. For that, check the skill whenever a change touches:
 
 | Change | Skill file to update |
 |---|---|

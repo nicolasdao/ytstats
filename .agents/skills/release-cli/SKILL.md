@@ -102,6 +102,32 @@ When the scan finds a candidate breaking change, **warn and ask** — present wh
 
 **Override handling.** If `$action` names a bump *lower* than the changes warrant, warn and ask for confirmation — never silently downgrade. If it names a *higher* bump, proceed without comment; the user may have reasons.
 
+## Step 4b — Check the agent skill is in sync
+
+The `ytstats` agent skill (`.agents/skills/ytstats/`, published as `nicolasdao/ytstats`) pilots the CLI on a user's behalf. It is a **second consumer of the same contracts** as `docs/` — commands, flags, diagnostic codes, `data` shapes, env vars — and nothing detects drift between them. `doc-manifest.json`'s `--affects` map covers `README.md` and `docs/**` only, so a release can update every doc correctly and still ship a skill describing behaviour that no longer exists. That is worse than a stale doc, because an agent *acts* on it.
+
+Run the coverage check:
+
+```bash
+bash "/Users/nicolasdao/Documents/projects/cloudless/tools/ytstats/.claude/skills/release-cli/scripts/skill-sync-check.sh"
+```
+
+It reports any command, diagnostic code, or environment variable the CLI has and the skill never mentions. It always exits 0 — this **warns, it never blocks**, because only the user knows whether a given change is observable to a caller or purely internal.
+
+Coverage is the mechanical half. The judgement half is yours, and the check prints the reminder: read the release diff for **behaviour** changes that keep the same identifiers.
+
+| Change in this release | Skill file |
+|---|---|
+| A command, flag, or default | `references/commands.md`, and the routing table in `SKILL.md` |
+| A diagnostic code, or its `recoverable` / `retryable` | `references/troubleshooting.md` |
+| The shape of any command's `data` | the shapes table in `SKILL.md` |
+| A value whose correct reading is non-obvious | `references/interpreting-results.md` |
+| Any behaviour a user on an older CLI would see differently | `systemDependencies.ytstats.version` in `skill.json` |
+
+**The version floor is the case most often missed.** A pure bug fix that merely restores already-documented behaviour teaches the skill nothing — but it still moves the floor, because the skill's guidance only becomes true at that version. v0.2.1 is the worked example: `reach` returned silently empty CTR on 0.2.0, so a skill declaring `>=0.2.0` would confidently tell a user they had no impressions data when they had plenty.
+
+When the check warns, or the diff shows a behaviour change, tell the user in Step 5 what the skill needs and that it must be republished separately — the skill has its own version and lifecycle. Do **not** block the release on it, and never edit the skill yourself here; that is `happyskills-design`'s job.
+
 ## Step 5 — Confirm before writing
 
 Use AskUserQuestion. Present:

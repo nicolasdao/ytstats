@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0] - 2026-07-29
+
+### Added
+- Document credential resolution — the five sources in precedence order, and the `YTSTATS_CREDENTIALS_FILE`, `YTSTATS_CLIENT_ID`, `YTSTATS_CLIENT_SECRET`, `XDG_CONFIG_HOME` and `HTTPS_PROXY` variables. None of these were mentioned before, so a request like "use the client secret in ~/secrets/acme.json" had no guidance to work from.
+- Warn that switching OAuth clients via `YTSTATS_CREDENTIALS_FILE` alone pairs one client's id with another's tokens, which is what `AUTH_CLIENT_MISMATCH` reports. `YTSTATS_CONFIG_DIR` moves both halves together.
+- Cover `AUTH_CREDENTIALS_NOT_FOUND` (noting `context.flag` names which source was wrong), `AUTH_CREDENTIALS_MALFORMED`, and `CONFIG_UNWRITABLE`.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed

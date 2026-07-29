@@ -25,6 +25,8 @@ Respect both and you never loop pointlessly. `recoverable: false` means stop. `r
 | `AUTH_TIMEOUT` | The callback never arrived. Usually Google showed "Access blocked" in the browser, which a retry cannot fix. Check the OAuth client, not the network |
 | `AUTH_CLIENT_ID_INVALID` | Client ID does not end in `.apps.googleusercontent.com` |
 | `AUTH_SERVICE_ACCOUNT` | **Not recoverable.** Service accounts own no YouTube channel and there is no workaround. The user needs an OAuth client ID, Desktop app type |
+| `AUTH_CREDENTIALS_NOT_FOUND` | The supplied credential path could not be opened. `context.flag` names which source — `--client-secret` or `YTSTATS_CREDENTIALS_FILE` — so say which one is wrong rather than guessing |
+| `AUTH_CREDENTIALS_MALFORMED` | The file opened but is not the JSON Google produces for an OAuth client. Usually the wrong file entirely, or a truncated download |
 | `AUTH_NO_CHANNEL` | The Google account authorized successfully but owns no YouTube channel |
 | `AUTH_STATE_MISMATCH` | CSRF check failed — stale browser tab or another process on the port. **Retryable** |
 
@@ -57,6 +59,16 @@ Do not "fix" this by re-running the same command. It is not retryable.
 `INPUT_INVALID_DATE`, `INPUT_INVALID_RANGE`, `INPUT_INVALID_CHOICE`, `INPUT_INVALID_VALUE`, `INPUT_MISSING_REQUIRED`, `INPUT_UNKNOWN_COMMAND`, `INPUT_UNKNOWN_OPTION`.
 
 All are the caller's fault and all are fixable without touching the user's account. `context.allowed` carries the valid set where one exists. Input is validated **before** authentication and **every** problem is reported at once, so one correction pass fixes everything rather than discovering a second problem after fixing the first.
+
+## Config — exit 1
+
+`CONFIG_UNWRITABLE` means the per-user config directory exists but cannot be written, so authentication has nowhere to persist. Point `YTSTATS_CONFIG_DIR` somewhere writable — common on CI runners and in containers where `$HOME` is read-only:
+
+```bash
+export YTSTATS_CONFIG_DIR=$PWD/.ytstats
+```
+
+`doctor` surfaces it as the `config_writable` check, which runs first because everything else depends on it.
 
 ## Warnings — never fatal
 

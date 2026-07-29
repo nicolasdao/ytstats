@@ -6,6 +6,22 @@ and this skill adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.h
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
+### Added
+
+- Step 4b checks that the `ytstats` agent skill still covers the CLI's surface,
+  backed by `scripts/skill-sync-check.sh`. The skill is a second consumer of the
+  same contracts as `docs/`, but `doc-manifest.json`'s `--affects` map covers
+  `README.md` and `docs/**` only — so a release could update every doc correctly
+  and still ship a skill describing behaviour that no longer existed. The check
+  reports commands, diagnostic codes, and environment variables the CLI has and
+  the skill never mentions. It warns and never blocks, since only the user knows
+  whether a change is observable to a caller or purely internal.
+- Guidance that a bug fix restoring already-documented behaviour still requires
+  raising `systemDependencies.ytstats.version` in the skill. That case looks like
+  "nothing to do" and is the one most often missed.
+
 ## [0.1.0] - 2026-07-28
 
 Initial version.

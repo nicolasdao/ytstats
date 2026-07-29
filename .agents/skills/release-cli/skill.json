@@ -1,6 +1,6 @@
 {
 	"name": "release-cli",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Release workflow for the ytstats npm CLI. Gated on a clean tree, green tests, and a recorded changelog. Bumps, stamps CHANGELOG.md, commits, and tags. Has an unreleased ledger mode. Never publishes.",
 	"type": "skill",
 	"authors": [

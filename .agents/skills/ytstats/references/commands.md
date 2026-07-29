@@ -23,6 +23,30 @@ Accepted by every analytics command. Not by `channel` or `videos`, which have no
 
 Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-31` is rejected rather than rolled into March. Every input problem is reported together in one envelope, before authentication.
 
+## Credentials and environment
+
+`ytstats` ships no Google client id — each user brings their own OAuth client. It is resolved from five sources, first complete pair wins:
+
+| Order | Source |
+|---|---|
+| 1 | `--client-secret <file>` on `login` or `import-legacy` |
+| 2 | `YTSTATS_CLIENT_ID` **and** `YTSTATS_CLIENT_SECRET` (both required, or the pair is ignored) |
+| 3 | `YTSTATS_CREDENTIALS_FILE` — a path to the JSON Google issued |
+| 4 | `credentials.json` stored by a previous `login` |
+| 5 | `client_secret*.json` auto-discovered in the working directory |
+
+`ytstats status` reports which one won as `credentialSource` (a path, `environment`, or `stored`) and the resolved `clientId`.
+
+| Variable | Effect |
+|---|---|
+| `YTSTATS_CREDENTIALS_FILE` | Point at a client secret file for this shell, without repeating `--client-secret`. Best when the file already exists on disk — no extracting two fields |
+| `YTSTATS_CLIENT_ID` / `YTSTATS_CLIENT_SECRET` | The pair form. Both must be set; one alone falls through to the next source |
+| `YTSTATS_CONFIG_DIR` | Move the whole config directory — credentials **and** tokens together |
+| `XDG_CONFIG_HOME` | Linux config base. Ignored when relative, per the XDG spec |
+| `HTTPS_PROXY` | Standard proxy variable, named in the `NETWORK_UNREACHABLE` remediation |
+
+**To use a different OAuth client, prefer `YTSTATS_CONFIG_DIR` over `YTSTATS_CREDENTIALS_FILE` alone.** One config directory holds one client but many channels, so pointing only at a different credentials file pairs that client's id with the previous client's tokens — which is exactly the state `AUTH_CLIENT_MISMATCH` reports. Setting the config dir moves both halves together and makes the mismatch impossible.
+
 ## Account and diagnosis
 
 | Command | Purpose |

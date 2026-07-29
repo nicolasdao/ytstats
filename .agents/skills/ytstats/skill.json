@@ -1,6 +1,6 @@
 {
 	"name": "ytstats",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 22 commands, the JSON envelope, and interpretation traps.",
 	"type": "skill",
 	"authors": ["Nicolas Dao <nicolas.dao@gmail.com>"],
