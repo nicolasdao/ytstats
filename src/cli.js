@@ -224,8 +224,19 @@ export function buildProgram(deps = {}) {
       // Ordered from cheapest to most expensive; each check reports pass/fail
       // independently so the caller sees the whole picture in one round trip.
       const checks = [];
-      const record = (id, label, ok, detail, diagnostic) => {
-        checks.push({ id, label, ok, detail, diagnostic: diagnostic ?? null });
+      // `status` carries what `ok` cannot: some prerequisites are real but not
+      // verifiable from here. `ok` stays boolean for existing consumers, and an
+      // `unknown` never drags down `healthy` — we did not find a problem, we
+      // were unable to look.
+      const record = (id, label, ok, detail, diagnostic, status) => {
+        checks.push({
+          id,
+          label,
+          ok,
+          status: status ?? (ok ? 'pass' : 'fail'),
+          detail,
+          diagnostic: diagnostic ?? null,
+        });
         return ok;
       };
 
@@ -262,25 +273,80 @@ export function buildProgram(deps = {}) {
           diagnose(DIAGNOSTICS.AUTH_NO_TOKENS));
       }
 
-      // 4. Live API reachability — only meaningful if the above passed
+      // 4-6. Each of the three APIs is enabled independently in Google Cloud, so
+      // each needs its own probe. Reaching only the Data API and reporting
+      // "healthy" is worse than not checking: setup looks complete, then the
+      // first `daily` or `reach` fails with API_NOT_ENABLED.
       if (credentials && accounts.length) {
+        const { apis } = withApis(globalOpts);
+        const range = resolveDateRange({ days: 1 });
+
+        // 4. Data API v3
         try {
-          const { apis } = withApis(globalOpts);
           const channel = await data.fetchChannel(apis);
           if (channel) {
-            record('api_reachable', 'YouTube API reachable and token valid', true,
+            record('api_reachable', 'YouTube Data API reachable and token valid', true,
               `${channel.title} — ${channel.subscriberCount} subscribers`);
           } else {
-            record('api_reachable', 'YouTube API reachable and token valid', false, null,
+            record('api_reachable', 'YouTube Data API reachable and token valid', false, null,
               diagnose(DIAGNOSTICS.AUTH_NO_CHANNEL));
           }
         } catch (err) {
-          record('api_reachable', 'YouTube API reachable and token valid', false, null,
+          record('api_reachable', 'YouTube Data API reachable and token valid', false, null,
+            err.diagnostic ?? diagnoseGoogleError(err));
+        }
+
+        // 5. Analytics API v2 — everything with a date window depends on this.
+        try {
+          await analytics.fetchDailyAnalytics(apis, range);
+          record('api_analytics', 'YouTube Analytics API enabled', true, 'one-day query succeeded');
+        } catch (err) {
+          record('api_analytics', 'YouTube Analytics API enabled', false, null,
+            err.diagnostic ?? diagnoseGoogleError(err));
+        }
+
+        // 6. Reporting API v1 — the only source of thumbnail impressions and CTR.
+        try {
+          const jobs = await reporting.listReachJobs(apis);
+          record('api_reporting', 'YouTube Reporting API enabled', true,
+            `${jobs.length} reporting job(s) on this channel`);
+        } catch (err) {
+          record('api_reporting', 'YouTube Reporting API enabled', false, null,
             err.diagnostic ?? diagnoseGoogleError(err));
         }
       } else {
-        record('api_reachable', 'YouTube API reachable and token valid', false,
-          'skipped — earlier checks failed', null);
+        for (const [id, label] of [
+          ['api_reachable', 'YouTube Data API reachable and token valid'],
+          ['api_analytics', 'YouTube Analytics API enabled'],
+          ['api_reporting', 'YouTube Reporting API enabled'],
+        ]) record(id, label, false, 'skipped — earlier checks failed', null);
+      }
+
+      // 7. Consent screen published to Production.
+      //
+      // No Google API exposes this, so it cannot be checked directly — and it is
+      // the one setup step whose failure is delayed: in Testing, Google expires
+      // refresh tokens after 7 days. Reporting it as `unknown` rather than
+      // omitting it keeps a real prerequisite visible instead of letting
+      // `healthy: true` imply a step nobody looked at.
+      //
+      // Age is the one honest signal: a token still working after 7 days proves
+      // Production, because Testing would already have killed it.
+      const oldest = accounts
+        .map(a => Date.parse(a.savedAt ?? ''))
+        .filter(t => Number.isFinite(t))
+        .sort((a, b) => a - b)[0];
+      const ageDays = oldest ? (now().getTime() - oldest) / 86_400_000 : null;
+      const apiWorks = checks.find(c => c.id === 'api_reachable')?.ok === true;
+
+      if (apiWorks && ageDays !== null && ageDays > 7) {
+        record('consent_screen', 'OAuth consent screen published to Production', true,
+          `proven — a token ${Math.floor(ageDays)} days old still works, which Testing mode would have expired`);
+      } else {
+        record('consent_screen', 'OAuth consent screen published to Production', true,
+          'cannot be verified — no API exposes this. In Testing, Google expires refresh tokens after 7 days. '
+          + 'Confirm the status reads "In production" at https://console.cloud.google.com/apis/credentials/consent',
+          null, 'unknown');
       }
 
       const failed = checks.filter(c => !c.ok && c.diagnostic);

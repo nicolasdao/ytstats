@@ -160,8 +160,45 @@ The three that bite hardest:
 - **ALWAYS** check `data.warnings[]` in a `fetch` result before calling a dataset empty or a run clean.
 - **ALWAYS** say which definition you used when Shorts classification could be ambiguous, since duration-based and YouTube's own classification disagree.
 
-## Setup
+## Setting up a new user
 
-The CLI ships **no** Google client id by design — each user brings their own Google Cloud OAuth client, so quota and verification are theirs and no data leaves the machine. A user with no credentials gets `AUTH_NO_CREDENTIALS`, whose `remediation.steps` carries the entire console walkthrough. Read those steps out rather than improvising the setup from memory.
+The CLI ships **no** Google client id by design — each user brings their own Google Cloud OAuth client, so the quota is theirs, no verification is needed, and no data leaves the machine. The cost is a one-time setup, and guiding someone through it is your job.
 
-A service account can **never** work — it owns no YouTube channel and there is no workaround. They need an OAuth client ID of type Desktop app.
+**Start with `doctor`, never with the full walkthrough.** It runs seven checks covering the whole setup and tells you exactly which steps are outstanding, so you present the three things they still need rather than reciting seven at someone who has done four.
+
+```bash
+ytstats doctor 2>/dev/null | jq '.data.checks'
+```
+
+It always exits 0 — a failing check is information, not an error to stop on. The verdict is `data.healthy`, and `data.blocking` holds the diagnostics in order.
+
+### Map each failing check to what they must do
+
+Walk `data.checks` in order and stop at the first `status: "fail"` — the checks are dependency-ordered, so later failures are usually consequences of earlier ones.
+
+| Failing check | What to tell them |
+|---|---|
+| `config_writable` | The config directory is not writable. Set `YTSTATS_CONFIG_DIR` somewhere that is |
+| `credentials` | No OAuth client yet. This is the full Google Cloud setup — walk `blocking[0].remediation.steps` verbatim |
+| `signed_in` | Client exists, nobody has authorized. Run `login`, approve in the browser |
+| `api_reachable` | Data API v3 not enabled, or the token is bad. The diagnostic distinguishes them |
+| `api_analytics` | Analytics API v2 not enabled — everything with a date window will fail until it is |
+| `api_reporting` | Reporting API v1 not enabled — `reach` and CTR will fail until it is |
+
+Each `API_NOT_ENABLED` diagnostic carries the exact console URL for **that** API in `remediation.docs`. Give them that link, not a general one.
+
+### Read the steps out, do not improvise them
+
+When `credentials` fails, `blocking[0].remediation.steps` is the complete seven-step walkthrough with live console URLs — create the project, enable three APIs, configure the consent screen, create the OAuth client, download the JSON, run `login`. Present those, in order. Reconstructing them from memory is how people end up creating the wrong credential type.
+
+**A service account can never work.** It owns no YouTube channel and there is no workaround — not with domain-wide delegation, not with any configuration. They need an **OAuth client ID, Application type: Desktop app**. If they supply a service account key the CLI fails with `AUTH_SERVICE_ACCOUNT`, `recoverable: false` — stop and tell them to create the right credential type.
+
+### The step you must raise yourself
+
+`consent_screen` reports `status: "unknown"` on a fresh setup, because no Google API exposes it. It is the only step whose failure is **delayed**: in Testing mode Google expires refresh tokens after 7 days, so everything works perfectly for a week and then breaks with `invalid_grant` looking like a brand-new problem.
+
+Whenever that check is `unknown`, say so explicitly and give them the link:
+
+> One step I cannot verify: your OAuth consent screen must be published to **Production**. In Testing, Google expires your login after 7 days. Check it reads "In production" at <https://console.cloud.google.com/apis/credentials/consent>
+
+Do not let it pass silently just because `healthy` is `true`. It flips to `pass` on its own once a working token is older than 7 days.

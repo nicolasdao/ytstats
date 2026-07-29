@@ -52,7 +52,7 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 | Command | Purpose |
 |---|---|
 | `status` | Who is signed in, where config lives, which client resolved. No auth needed |
-| `doctor` | Four independent readiness checks. Always exits 0 — the verdict is `data.healthy` |
+| `doctor` | Seven independent readiness checks covering the whole setup. Always exits 0 — the verdict is `data.healthy` |
 | `login [-c <path>] [--no-browser] [--timeout <s>]` | Loopback OAuth. `--no-browser` prints a URL and reads the pasted redirect |
 | `logout [--all] [--forget-credentials]` | Revoke with Google, delete locally. **Confirm before running** |
 | `use <channelId or @handle>` | Set the default channel. Fails if not signed in |
@@ -60,7 +60,11 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 
 `status` returns `{ authenticated, configDir, credentialSource, clientId, accounts[], setupGuide? }`. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `savedAt`, `isDefault` — never token material.
 
-`doctor` checks `config_writable`, `credentials`, `signed_in`, `api_reachable` in that order, skipping the last if earlier ones failed.
+`doctor` checks, in dependency order: `config_writable`, `credentials`, `signed_in`, then one probe per API — `api_reachable` (Data v3), `api_analytics` (Analytics v2), `api_reporting` (Reporting v1) — and finally `consent_screen`. The three API probes are skipped when earlier checks failed.
+
+Each check carries `status` (`pass` / `fail` / `unknown`) alongside boolean `ok`. The three APIs are enabled independently in Google Cloud, so a pass on one says nothing about the others.
+
+`consent_screen` is normally `unknown` — no API exposes it, and an `unknown` never counts against `healthy`. Raise it with the user anyway; see the setup flow in `SKILL.md`.
 
 ## The everything command
 

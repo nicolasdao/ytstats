@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0] - 2026-07-29
+
+### Added
+- Guide a brand-new user through setup from `doctor` rather than reciting the whole walkthrough. The seven checks map to exactly which steps are outstanding, so someone who has done four is shown the remaining three, each with the console URL for that specific API.
+- Raise the `consent_screen` step explicitly whenever `doctor` reports it `unknown`. No API exposes whether the consent screen is published, and it is the only step whose failure is delayed — everything works for 7 days, then breaks with `invalid_grant` looking like a new problem. Silence here is how that trap keeps catching people.
+- Note that the three YouTube APIs are enabled independently, so a pass on one says nothing about the others.
+
+### Changed
+- Require `ytstats` 0.3.0 or newer, where `doctor` gained the per-API probes, the `consent_screen` check, and the `status` field the setup flow reads.
+
 ## [0.3.0] - 2026-07-29
 
 ### Added

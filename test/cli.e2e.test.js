@@ -255,6 +255,46 @@ describe('ytstats CLI (end to end)', () => {
       expect(creds.ok).toBe(false);
       expect(creds.diagnosticCode).toBe('AUTH_NO_CREDENTIALS');
     });
+
+    it('probes all three APIs separately, since each is enabled independently', async () => {
+      // Reaching only the Data API and reporting healthy is worse than not
+      // checking: setup looks complete, then the first `daily` or `reach` fails
+      // with API_NOT_ENABLED and nothing pointed at the missing API.
+      const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
+      const ids = JSON.parse(stdout).data.checks.map(c => c.id);
+      expect(ids).toEqual(expect.arrayContaining(
+        ['api_reachable', 'api_analytics', 'api_reporting']));
+    });
+
+    it('reports the consent screen as unknown rather than passing it silently', async () => {
+      // No Google API exposes whether the consent screen is published, and it is
+      // the one step whose failure is delayed by 7 days. Omitting it would let
+      // healthy:true imply a prerequisite nobody looked at.
+      const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
+      const consent = JSON.parse(stdout).data.checks.find(c => c.id === 'consent_screen');
+      expect(consent).toBeDefined();
+      expect(consent.status).toBe('unknown');
+      expect(consent.detail).toMatch(/credentials\/consent/);
+    });
+
+    it('an unknown check never drags down the health verdict', async () => {
+      // "We could not look" must not read as "we found a problem".
+      const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
+      const out = JSON.parse(stdout);
+      const consent = out.data.checks.find(c => c.id === 'consent_screen');
+      expect(consent.status).toBe('unknown');
+      expect(out.data.blocking.map(d => d.code)).not.toContain('CONSENT_SCREEN');
+      // healthy is false here only because credentials/signed_in genuinely failed.
+      expect(out.data.checks.filter(c => c.status === 'fail').length).toBeGreaterThan(0);
+    });
+
+    it('every check carries a status of pass, fail, or unknown', async () => {
+      const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
+      for (const c of JSON.parse(stdout).data.checks) {
+        expect(['pass', 'fail', 'unknown']).toContain(c.status);
+        expect(typeof c.ok).toBe('boolean');
+      }
+    });
   });
 
   describe('stdout purity', () => {

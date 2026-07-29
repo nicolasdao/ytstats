@@ -127,16 +127,25 @@ ytstats status 2>/dev/null | jq -r '.data.accounts[] | select(.isDefault) | .cha
 ytstats doctor
 ```
 
-Runs four independent readiness checks, cheapest first, and reports all of them rather than stopping at the first failure:
+Runs seven independent readiness checks, cheapest first, and reports all of them rather than stopping at the first failure. Together they cover the whole setup walkthrough, so `doctor` is the one call that answers "what is still missing".
 
 | Check id | What it proves |
 |---|---|
 | `config_writable` | The config directory exists and accepts a write (probe file is written then removed) |
 | `credentials` | An OAuth client resolved from some source |
 | `signed_in` | At least one channel has stored tokens |
-| `api_reachable` | A live `channels.list` call succeeds with the stored token |
+| `api_reachable` | A live `channels.list` succeeds — the **Data API v3** is enabled |
+| `api_analytics` | A one-day `reports.query` succeeds — the **Analytics API v2** is enabled |
+| `api_reporting` | `jobs.list` succeeds — the **Reporting API v1** is enabled |
+| `consent_screen` | Published to Production — see below, this one is usually `unknown` |
 
-`api_reachable` is skipped when earlier checks failed, since it cannot succeed.
+The three APIs are enabled **independently** in Google Cloud, so each gets its own probe. Reaching only the Data API and reporting healthy would be worse than not checking: setup looks complete, then the first `daily` or `reach` fails with `API_NOT_ENABLED` and nothing points at the missing API. All three are skipped when earlier checks failed, since they cannot succeed.
+
+Every check carries a `status` of `pass`, `fail`, or `unknown` alongside its boolean `ok`.
+
+**`consent_screen` is the honest gap.** No Google API exposes whether the consent screen is published, and it is the one setup step whose failure is *delayed* — in Testing, Google expires refresh tokens after 7 days. It is reported as `status: "unknown"` with the console URL rather than omitted, so `healthy: true` never implies a prerequisite nobody looked at. An `unknown` never counts against `healthy`: "we could not look" is not "we found a problem".
+
+It flips to `pass` on its own once a working token is more than 7 days old — Testing mode would already have expired it, so age is proof.
 
 `doctor` itself always succeeds — `ok: true`, exit 0. The verdict is `data.healthy`, and the blocking diagnostics are in `data.blocking`. Failures are also attached as envelope warnings. This is deliberate: a health check that exits non-zero when it finds a problem is reporting its own success incorrectly.
 

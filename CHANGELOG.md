@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Probe all three YouTube APIs in `doctor` instead of only the Data API. They are
+  enabled independently in Google Cloud, so reaching one said nothing about the
+  others — setup could look complete, `healthy` report `true`, and the first
+  `daily` or `reach` then fail with `API_NOT_ENABLED` and nothing pointing at the
+  missing API. `api_analytics` and `api_reporting` join `api_reachable`, each
+  carrying that API's own console URL in its remediation.
+- Add a `consent_screen` check reporting `status: "unknown"`. No Google API
+  exposes whether the consent screen is published to Production, and it is the one
+  setup step whose failure is delayed — in Testing, Google expires refresh tokens
+  after 7 days, so everything works for a week and then breaks looking like a new
+  problem. Reporting it as unverifiable keeps a real prerequisite visible rather
+  than letting `healthy: true` imply a step nobody looked at. It flips to `pass`
+  once a working token is older than 7 days, which Testing mode would have expired.
+- Add `status` (`pass` / `fail` / `unknown`) to every `doctor` check, alongside the
+  existing boolean `ok`. An `unknown` never counts against `healthy` — "we could
+  not look" is not "we found a problem".
+
 ## [0.2.1] - 2026-07-28
 
 ### Fixed
