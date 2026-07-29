@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-29
+
+### Fixed
+
+- Point at the Google console pages that exist. Google moved OAuth configuration
+  into a "Google Auth Platform" section in April 2025: the consent screen is now
+  `/auth/audience` and the OAuth client is `/auth/clients`. Every diagnostic, the
+  setup walkthrough, and the README used the retired `/apis/credentials/consent`
+  and `/apis/credentials` paths, so a new user following the instructions was
+  being sent to pages Google no longer documents.
+- Stop advising users to re-download an existing client's JSON. Since June 2025
+  the client secret is shown only at creation and the console afterwards displays
+  just its last four characters, so that remediation could not be followed. It now
+  says to add a new secret or create a new client.
+
+### Added
+
+- Report which Google Cloud project the credentials belong to. `ytstats status`
+  gains `project` — `{ id, number, consoleUrl }` — with a console URL already
+  pinned via `?project=`, and `doctor`'s consent-screen link is pinned the same
+  way. A bare console URL opens whichever project the browser last used, so
+  anyone signed into several accounts could confidently check the wrong project's
+  consent screen and conclude they were fine. `projectId` is now kept from the
+  `project_id` Google includes in the downloaded client file.
+- Warn in the setup walkthrough that the client JSON must be downloaded at the
+  moment of creation.
+
 ## [0.3.0] - 2026-07-29
 
 ### Added
@@ -110,7 +137,8 @@ Initial release.
 - Client ID pre-flight validation, so a malformed OAuth client fails immediately
   instead of hanging until the browser callback times out.
 
-[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/nicolasdao/ytstats/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nicolasdao/ytstats/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/nicolasdao/ytstats/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/nicolasdao/ytstats/compare/v0.1.0...v0.2.0
