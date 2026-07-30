@@ -594,9 +594,25 @@ export function buildProgram(deps = {}) {
 
   // ------------------------------------------------------------ analytics
 
-  const simple = (name, description, fn) => {
+  /**
+   * Dimensions that can partition an existing report rather than adding a new one.
+   *
+   * Deliberately just these two: each addition is a value the agent skill and the
+   * docs must teach a reader to interpret, and the API's support for a segment
+   * varies by report — see the exclusion below and `docs/gotchas/youtube-api.md`.
+   */
+  const SEGMENTS = ['subscribedStatus', 'youtubeProduct'];
+
+  const simple = (name, description, fn, { segmentable = true } = {}) => {
     const cmd = accountOption(program.command(name).description(description));
-    dateOptions(cmd).action(run(
+    // Declared even where it is refused, so `--segment` on those commands fails as
+    // an invalid choice naming the flag rather than as an unknown option. Hidden
+    // from their help, because advertising a flag that always fails is worse.
+    const segment = new Option('--segment <dimension>', 'partition rows by a second dimension')
+      .choices(SEGMENTS);
+    if (!segmentable) segment.hideHelp();
+
+    dateOptions(cmd).addOption(segment).action(run(
       name,
       async (cmdOpts, globalOpts) => {
         const { apis } = withApis(globalOpts, cmdOpts);
@@ -609,7 +625,11 @@ export function buildProgram(deps = {}) {
         // same shape as the reach-CSV regression, which stayed hidden for two
         // months precisely because ok stayed true and no warning fired.
         const dropped = [];
-        const rows = await fn(apis, { ...range, onDegraded: m => dropped.push(...m) }, cmdOpts);
+        const rows = await fn(
+          apis,
+          { ...range, segment: cmdOpts.segment, onDegraded: m => dropped.push(...m) },
+          cmdOpts,
+        );
 
         // Empty is ambiguous — say explicitly that the query worked and found nothing.
         if (Array.isArray(rows) && rows.length === 0) {
@@ -627,7 +647,25 @@ export function buildProgram(deps = {}) {
         // `period` is the clean range — never the object carrying onDegraded.
         return { period: range, rows };
       },
-      { validate: cmdOpts => validateRange(cmdOpts) },
+      {
+        validate: cmdOpts => {
+          const problems = validateRange(cmdOpts);
+          // Rejected here rather than at the API, which answers a segmented
+          // insightTrafficSourceDetail query with an opaque "query is not
+          // supported" that names neither the flag nor the reason.
+          if (cmdOpts.segment && !segmentable) {
+            problems.push(diagnose(DIAGNOSTICS.INPUT_INVALID_CHOICE, {
+              flag: '--segment',
+              value: cmdOpts.segment,
+              allowed: [],
+              detail: `${name} cannot be segmented — it reads the insightTrafficSourceDetail `
+                + 'dimension, which tolerates only the views metric and fails outright when a '
+                + 'second dimension is added. Run it unsegmented.',
+            }));
+          }
+          return problems;
+        },
+      },
     ));
     return cmd;
   };
@@ -654,7 +692,7 @@ export function buildProgram(deps = {}) {
     (apis, range) => analytics.fetchVideoAnalytics(apis, range));
 
   simple('search-terms', 'what people search on YouTube to find your channel',
-    (apis, range) => analytics.fetchSearchTerms(apis, range))
+    (apis, range) => analytics.fetchSearchTerms(apis, range), { segmentable: false })
     .option('-n, --limit <number>', 'maximum terms (max 25)', '25');
 
   simple('geography', 'viewer breakdown by country',
