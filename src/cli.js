@@ -16,15 +16,17 @@ import {
 /** Fallback when no credentials resolved, so no project is known yet. */
 const CONSOLE_HOST = 'https://console.cloud.google.com';
 import { listAccounts, setDefaultAccount, migrateLegacyTokens } from './auth/tokens.js';
+import { captionsScopeMissing } from './auth/oauth.js';
 import { configDir, writeJson, removeFile } from './config/store.js';
 import { diagnoseGoogleError } from './errors.js';
 import { createApis } from './api/client.js';
 import * as data from './api/data.js';
 import * as analytics from './api/analytics.js';
 import * as reporting from './api/reporting.js';
+import * as captions from './api/captions.js';
 import { fetchAll } from './fetch-all.js';
 import { syncReports, findExpiringReports } from './sync.js';
-import { archiveStatus, dataDir } from './archive.js';
+import { archiveStatus, dataDir, readTranscript, writeTranscript } from './archive.js';
 
 const pkg = JSON.parse(
   fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8'),
@@ -684,6 +686,74 @@ export function buildProgram(deps = {}) {
       }));
     }
     return { videoId, period: range, curve };
+  }));
+
+  accountOption(
+    program
+      .command('transcript <videoId>')
+      .description('caption transcript with cue timings, for a video you own'),
+  ).action(run('transcript', async (videoId, cmdOpts, globalOpts) => {
+    const { apis, account } = withApis(globalOpts, cmdOpts);
+
+    // Pre-flight only when the stored grant is KNOWN to lack the scope. A null
+    // scopes array means unknown — accounts saved before the field existed have
+    // one — and refusing those would lock out every pre-upgrade user to prevent a
+    // problem most of them do not have. Let Google's own 403 speak in that case.
+    if (captionsScopeMissing(account)) {
+      throw fail(DIAGNOSTICS.AUTH_SCOPE_MISSING, {
+        account: account.channelTitle ?? account.channelId,
+      });
+    }
+
+    reporter.progress(`Listing caption tracks for ${videoId}...`);
+    const tracks = await captions.listCaptionTracks(apis, videoId);
+    const track = captions.selectCaptionTrack(tracks);
+
+    if (!track) {
+      // Worked and found nothing — distinguishable from failed, per the same
+      // convention every dataset command follows.
+      reporter.warn(diagnose(DIAGNOSTICS.DATA_EMPTY, {
+        step: 'transcript',
+        detail: `Video ${videoId} has no usable caption track (${tracks.length} found, drafts excluded)`,
+      }));
+      return {
+        videoId, trackId: null, language: null, trackKind: null,
+        lastUpdated: null, cachedAt: null, cues: [],
+      };
+    }
+
+    // Captions can be edited after upload, so the cache keys on the track's
+    // lastUpdated rather than merely on the video id. captions.list is the cheap
+    // call; captions.download is the one worth avoiding.
+    const cached = readTranscript(videoId);
+    if (cached && cached.trackId === track.id && cached.lastUpdated === track.lastUpdated) {
+      reporter.progress('Using the cached transcript; the track has not changed since.');
+      return cached;
+    }
+
+    reporter.progress(`Downloading the ${track.trackKind === 'ASR' ? 'auto-generated' : 'author-written'} ${track.language ?? 'default'} track...`);
+    const { cues } = await captions.downloadCaptionTrack(apis, track.id);
+
+    const record = {
+      videoId,
+      // Which track spoke is part of the answer: an auto-generated transcript and
+      // an author-written one are different claims about the same video.
+      trackId: track.id,
+      language: track.language,
+      trackKind: track.trackKind,
+      lastUpdated: track.lastUpdated,
+      cachedAt: now().toISOString(),
+      cues,
+    };
+    writeTranscript(videoId, record);
+
+    if (cues.length === 0) {
+      reporter.warn(diagnose(DIAGNOSTICS.DATA_EMPTY, {
+        step: 'transcript',
+        detail: `Caption track ${track.id} downloaded but contained no cues`,
+      }));
+    }
+    return record;
   }));
 
   dateOptions(

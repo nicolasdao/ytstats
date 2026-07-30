@@ -50,6 +50,24 @@ function safeType(reportTypeId) {
   return reportTypeId;
 }
 
+/**
+ * Video ids also land in a path, but they need a different rule from safeType.
+ *
+ * YouTube ids are [A-Za-z0-9_-]{11} and routinely contain a hyphen, which
+ * safeType rejects. Loosening safeType is not the fix: it guards the report-type
+ * path against traversal and that protection is load-bearing. So this validator
+ * admits the hyphen and nothing else dangerous — no separators, no `.` or `..`,
+ * no absolute paths, no NUL. Like assertSafeName in config/store.js it throws
+ * rather than sanitising, because a caller passing `../../id_rsa` has a defect
+ * and rewriting the value would let that defect ship.
+ */
+function safeVideoId(videoId) {
+  if (typeof videoId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(videoId)) {
+    throw new Error(`Invalid video id: ${JSON.stringify(videoId)}`);
+  }
+  return videoId;
+}
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
   try {
@@ -164,6 +182,47 @@ export function appendRows(reportTypeId, rows, { reportId, jobId, createTime } =
     // Windows: no-op.
   }
   return rows.length;
+}
+
+/**
+ * Transcripts are stored apart from report data, deliberately.
+ *
+ * Not in the NDJSON report files: a transcript is one document per video rather
+ * than an append-only row stream, captions do not expire the way reports do, and
+ * mixing them would make `archive`'s row totals meaningless. So they live under
+ * <dataDir>/transcripts/<videoId>.json with the same 0700/0600 discipline.
+ *
+ * Caching is not merely an optimisation here. captions.download is the expensive
+ * call in the pair, and captions can be edited after upload — so the cache keys on
+ * the track's `lastUpdated`, which captions.list returns cheaply.
+ */
+const transcriptsDir = () => path.join(dataDir(), 'transcripts');
+
+const transcriptFileFor = videoId =>
+  path.join(transcriptsDir(), `${safeVideoId(videoId)}.json`);
+
+/** A cached transcript, or null when nothing is stored or the file is unreadable. */
+export function readTranscript(videoId) {
+  try {
+    return JSON.parse(fs.readFileSync(transcriptFileFor(videoId), 'utf-8'));
+  } catch (err) {
+    // A bad id is a caller defect and must surface; an absent or corrupt file just
+    // means "no usable cache", which is a re-download rather than a failure.
+    if (err instanceof Error && err.message.startsWith('Invalid video id')) throw err;
+    return null;
+  }
+}
+
+export function writeTranscript(videoId, record) {
+  const dir = ensureDir(transcriptsDir());
+  const file = path.join(dir, `${safeVideoId(videoId)}.json`);
+  fs.writeFileSync(file, JSON.stringify(record, null, 2) + '\n', { mode: FILE_MODE });
+  try {
+    fs.chmodSync(file, FILE_MODE);
+  } catch {
+    // Windows: no-op.
+  }
+  return file;
 }
 
 /**
