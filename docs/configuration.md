@@ -16,7 +16,7 @@ source:
 | Variable | Read by | Effect |
 |---|---|---|
 | `YTSTATS_CONFIG_DIR` | `resolveConfigDir()` | Overrides the config directory entirely. Relative values are resolved to absolute against the working directory |
-| `YTSTATS_DATA_DIR` | `resolveDataDir()` | Overrides where the report archive is stored. Defaults to `<config dir>/data`, so `YTSTATS_CONFIG_DIR` moves credentials, tokens **and** archive together. Relative values are resolved to absolute |
+| `YTSTATS_DATA_DIR` | `resolveDataDir()` | Overrides where the report archive and the transcript cache are stored. Defaults to `<config dir>/data`, so `YTSTATS_CONFIG_DIR` moves credentials, tokens **and** archive together. Relative values are resolved to absolute |
 | `YTSTATS_CLIENT_ID` | `resolveCredentials()` | OAuth client id. **Both** this and the secret must be set for the pair to be used |
 | `YTSTATS_CLIENT_SECRET` | `resolveCredentials()` | OAuth client secret |
 | `YTSTATS_CREDENTIALS_FILE` | `resolveCredentials()` | Path to the `client_secret` JSON Google issued. Same effect as `--client-secret`, without repeating the flag |
@@ -27,6 +27,8 @@ source:
 Note the deliberate asymmetry: a relative `XDG_CONFIG_HOME` is ignored because the spec says so, while a relative `YTSTATS_CONFIG_DIR` is accepted and resolved — it is an explicit override, not an environment convention.
 
 **One archive holds one channel's data cleanly; several channels share it.** The archive is one file per report type, not per channel, so syncing two channels from the same config directory interleaves them. Rows stay distinguishable by `channel_id` and never overwrite each other, but `archive` totals and `readRows()` cover both — give each channel its own `YTSTATS_CONFIG_DIR`, which carries the archive with it. See [the gotcha](gotchas/youtube-api.md#the-archive-is-keyed-by-report-type-not-by-channel).
+
+The directory holds two separate stores: `reports/` (append-only NDJSON, one file per report type) and `transcripts/` (one JSON document per video, keyed by video id). They are kept apart deliberately — reports expire and accumulate rows, transcripts do not expire and are replaced wholesale — and mixing them would make `ytstats archive`'s row totals meaningless.
 
 **Point `YTSTATS_DATA_DIR` somewhere you back up.** The archive under it is the only copy of any Reporting API data older than 60 days — Google deletes reports 60 days after generating them (30 days for backfill reports). Everything else `ytstats` stores can be recreated by logging in again; this cannot be recreated at all.
 
@@ -79,6 +81,7 @@ The multi-account token store, keyed by channel id:
       "channelTitle": "…",
       "customUrl": "@…",
       "clientId": "123456789012-abc.apps.googleusercontent.com",
+      "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "…"],
       "tokens": { "access_token": "…", "refresh_token": "…", "expiry_date": 0 },
       "savedAt": "2026-07-27T10:00:00.000Z"
     }
@@ -87,6 +90,8 @@ The multi-account token store, keyed by channel id:
 ```
 
 `clientId` records which OAuth client issued this account's refresh token. It is not a secret and is never used to authenticate — it exists so a later run can tell whether the credentials it resolved are the ones the token belongs to. Accounts written before the field existed have `null` and are treated as unknown, not as a mismatch.
+
+`scopes` records what Google actually granted at sign-in, because the captions scope is opt-in and so the grant varies. Scope names are not secrets and are printed by `ytstats status`. Accounts written before the field existed have `null`, which likewise means unknown rather than "nothing granted" — see [auth.md](auth.md#what-was-actually-granted).
 
 Deleted entirely when the last account is removed. See [auth.md](auth.md#token-storage) for how it is read and merged.
 

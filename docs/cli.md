@@ -18,7 +18,7 @@ ytstats [global flags] <command> [command flags]
 
 Installed globally, or run without installing via `npx ytstats <command>`.
 
-Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 26 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
+Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 27 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
 
 ## Global flags
 
@@ -67,7 +67,7 @@ $ ytstats daily --start 01/01/2026 --end yesterday --days -3
 ### login
 
 ```bash
-ytstats login [-c|--client-secret <path>] [--no-browser] [--timeout <seconds>]
+ytstats login [-c|--client-secret <path>] [--no-browser] [--with-captions] [--timeout <seconds>]
 ```
 
 Runs the loopback OAuth flow: opens the browser, captures the callback on `127.0.0.1`, exchanges the code, fetches the channel identity, and stores both the OAuth client and the tokens.
@@ -76,6 +76,7 @@ Runs the loopback OAuth flow: opens the browser, captures the callback on `127.0
 |---|---|---|
 | `-c, --client-secret <path>` | resolution order below | Path to the `client_secret` JSON downloaded from Google Cloud |
 | `--no-browser` | off | Print the URL and read the pasted redirect back — for SSH and headless machines |
+| `--with-captions` | off | Also request caption access, which `ytstats transcript` needs. Write-capable — see below |
 | `--timeout <seconds>` | `300` | How long to wait for the browser callback, so an automated caller is never blocked indefinitely |
 
 Credentials are resolved in this order: `--client-secret` → `YTSTATS_CLIENT_ID`/`YTSTATS_CLIENT_SECRET` → `YTSTATS_CREDENTIALS_FILE` → stored `credentials.json` → `client_secret*.json` in the working directory. See [configuration.md](configuration.md).
@@ -85,7 +86,12 @@ Returns `{ channelId, channelTitle, customUrl, configDir }`.
 ```bash
 ytstats login --client-secret ~/Downloads/client_secret_1234.json
 ytstats login --no-browser          # headless
+ytstats login --with-captions       # adds caption access, for `ytstats transcript`
 ```
+
+**About `--with-captions`.** The default grant is three read-only scopes. Captions have no read-only scope — `captions.list` and `captions.download` both require `youtube.force-ssl`, which Google's consent screen calls *"Manage your YouTube account"* — so the only way to read a transcript is to hold a write-capable scope. `ytstats` still never writes.
+
+It is opt-in for that reason: nobody acquires write capability without asking for it. Adding it later is safe and additive, because incremental authorization is enabled — the scopes you already granted are kept rather than replaced. Running `transcript` without it fails with [`AUTH_SCOPE_MISSING`](output-contract.md#diagnostic-catalog) and names the command to fix it.
 
 ### logout
 
@@ -271,6 +277,37 @@ Ratios above `1.0` are correct and never clamped: a Short showing `1.54` means v
 The last four are the ones that explain a dip. A trough with high `stoppedWatching` is content losing people; the same trough preceded by high `startedWatching` is viewers skipping an intro. Those need opposite edits, and `ratio` alone cannot distinguish them.
 
 Any of the four may be `null` if this channel cannot serve it — `relativeRetentionPerformance` needs a peer set and is the most often missing. When that happens the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly what was dropped. **A `null` here means unknown, never zero.**
+
+### transcript
+
+```bash
+ytstats transcript <videoId>
+```
+
+The caption transcript for one video, with cue timings — the other half of a retention analysis. `retention` says *where* viewers left; this says *what was being said* there.
+
+Requires the opt-in captions scope: run `ytstats login --with-captions` first. Without it the command fails with `AUTH_SCOPE_MISSING` rather than an opaque Google 403. It takes no date flags — a transcript is not a time series.
+
+Returns `{ videoId, trackId, language, trackKind, lastUpdated, cachedAt, cues }`. Each cue is exactly:
+
+| Field | Meaning |
+|---|---|
+| `start` | Cue start, in **seconds as a number** — not a timestamp string |
+| `end` | Cue end, same units |
+| `text` | What was said, with multi-line cues joined and markup stripped |
+
+Seconds because retention's x-axis is `elapsedVideoTimeRatio`, a fraction of the video: aligning the two needs numbers and the video's duration (from `ytstats videos`). The join is deliberately left to the consumer — `ytstats` emits the two primitives rather than a correlation it would have to guess the shape of.
+
+**`trackKind` matters when reading the text.** `ASR` means YouTube's speech recognition wrote it, and it mishears names, jargon and anything over music. Anything else was written by the channel owner. `ytstats` prefers an author-written track, falls back to ASR, skips drafts entirely, and always reports which one it used — the choice is never silent.
+
+Transcripts are cached under `<data dir>/transcripts/<videoId>.json` and keyed on the track's `lastUpdated`, so a second run for an unchanged track lists the tracks (cheap) and skips the download (not cheap). Editing the captions on YouTube invalidates the cache automatically.
+
+A video with no usable caption track returns `cues: []` with a `DATA_EMPTY` warning and `ok: true` — captions being off is not a failure. `captions.download` needs edit permission on the video, so this only works for channels you own.
+
+```bash
+ytstats transcript dQw4w9WgXcQ 2>/dev/null | jq '.data.cues[0]'
+ytstats transcript dQw4w9WgXcQ 2>/dev/null | jq -r '.data.cues[] | "\(.start)  \(.text)"'
+```
 
 ## reach
 

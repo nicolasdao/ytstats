@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-422 tests across 15 files. **None of them requires network access**, and none opens a browser.
+480 tests across 17 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 
@@ -34,18 +34,20 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 
 | File | Tests | Covers |
 |---|---|---|
-| `test/envelope.test.js` | 104 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
+| `test/envelope.test.js` | 106 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
 | `test/api/fetchers.test.js` | 49 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher; metric tiers; job coverage |
+| `test/api/captions.test.js` | 24 | Exact caption query parameters, track selection, and the VTT/SRT cue parser pinned to real values |
 | `test/cli.e2e.test.js` | 43 | The real binary, spawned as a subprocess |
 | `test/api/transforms.test.js` | 33 | Duration parsing, content classification, CSV, date normalization, row zipping |
 | `test/auth/credentials.test.js` | 31 | Resolution precedence across all five sources, file shapes, service-account rejection, discovery |
-| `test/auth/session.test.js` | 26 | `login`, `logout`, `getAuthenticatedClient`, refresh persistence, client-mismatch detection |
-| `test/auth/tokens.test.js` | 26 | Multi-account store, merging, the client binding, default promotion, legacy import |
+| `test/auth/session.test.js` | 31 | `login`, `logout`, `getAuthenticatedClient`, refresh persistence, client-mismatch detection |
+| `test/auth/tokens.test.js` | 30 | Multi-account store, merging, the client binding, default promotion, legacy import |
 | `test/archive.test.js` | 24 | Archive location, dimension detection, append/replay, last-wins, expiry, `sync` idempotence |
-| `test/auth/oauth.test.js` | 18 | PKCE, auth URL construction, and the loopback server over real HTTP |
+| `test/auth/oauth.test.js` | 26 | PKCE, auth URL construction, and the loopback server over real HTTP |
 | `test/config/store.test.js` | 14 | Atomic writes, permissions, traversal rejection |
 | `test/fetch-all.test.js` | 13 | Orchestration, per-step degradation, fatal codes, retention capping |
 | `test/cli-degradation.test.js` | 12 | Authenticated commands in-process: which warnings a dropped metric produces |
+| `test/transcript.test.js` | 15 | The `transcript` command in-process: cue shape, cache hit and invalidation, the hyphenated video id, and the scope-missing failure |
 | `test/dates.test.js` | 11 | Window resolution, calendar validation, bounds |
 | `test/client-id.test.js` | 10 | Client ID pre-flight validation, both tiers |
 | `test/config/paths.test.js` | 8 | Per-OS directory resolution, including Windows and Linux from any host |

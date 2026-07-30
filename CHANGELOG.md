@@ -6,6 +6,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ytstats transcript <videoId>` — the caption transcript for a video you own,
+  with cue timings. This is the other half of a retention analysis: `retention`
+  says *where* viewers left, `transcript` says *what was being said* there. Cues
+  are `{ start, end, text }` with times as **seconds as numbers**, because
+  retention's x-axis is `elapsedVideoTimeRatio` and aligning the two needs
+  numbers. The join is left to the consumer rather than guessed at here.
+- `ytstats login --with-captions` — opt-in caption access. Captions have **no
+  read-only scope**: `captions.list` and `captions.download` both require
+  `youtube.force-ssl`, which Google presents as "Manage your YouTube account".
+  The default grant is therefore unchanged at three read-only scopes, and
+  nobody acquires write capability without asking. `ytstats` still never writes.
+  Adding the scope later is additive — incremental authorization was already
+  enabled, so previously granted scopes are preserved.
+- `scopes` on each account in `ytstats status`, recording what Google actually
+  granted. An absent value means **unknown**, not "nothing granted": accounts
+  saved before this field existed have `null` and keep working. The value is
+  never synthesized from the requested scope list, because a fabricated grant
+  record is worse than none — the scope check trusts what it reads.
+- `AUTH_SCOPE_MISSING` — raised before the request when the stored grant is
+  known to lack caption access, so the user gets `ytstats login --with-captions`
+  instead of an opaque Google 403. `retryable: false`: re-running the same
+  command cannot help.
+- Library exports: the `captions` namespace, `CAPTIONS_SCOPE`, `parseCues`,
+  `readTranscript` and `writeTranscript`.
+
+### Notes
+
+- Transcripts are cached under `<data dir>/transcripts/<videoId>.json`, keyed on
+  the caption track's `lastUpdated` so an edited track invalidates the cache on
+  its own. The cache is load-bearing rather than an optimisation:
+  `captions.download` costs **200 quota units** against a 10,000/day budget —
+  the most expensive call `ytstats` makes, roughly 50 transcripts a day. Listing
+  tracks to check staleness costs 50. `transcript` is deliberately one video at
+  a time, with no bulk mode.
+- The transcript cache uses its own path validator rather than the report-type
+  one, which rejects hyphens — and most YouTube video ids contain one.
+
 ## [0.6.1] - 2026-07-30
 
 ### Fixed

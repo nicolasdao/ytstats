@@ -129,6 +129,7 @@ ytstats fetch 2>/dev/null | jq -r 'if .ok then "fine" else .nextSteps[0] end'
 | `AUTH_NO_CHANNEL` | yes | no | Authorization succeeded but the account owns no YouTube channel |
 | `AUTH_CREDENTIALS_MALFORMED` | yes | no | File is not the JSON Google produces for an OAuth client |
 | `AUTH_CREDENTIALS_NOT_FOUND` | yes | no | `--client-secret` path could not be opened |
+| `AUTH_SCOPE_MISSING` | yes | no | Signed in without the opt-in captions scope; `transcript` needs it. Fix with `ytstats login --with-captions` |
 
 ### Google APIs — exit 4
 

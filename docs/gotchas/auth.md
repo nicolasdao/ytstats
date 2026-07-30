@@ -120,6 +120,18 @@ The same reasoning applies to the refresh write-back path: `client.on('tokens', 
 
 **Where handled:** the `account.clientId &&` guard in `getAuthenticatedClient()`; the `clientId ?? existing?.clientId ?? null` fallback in `saveAccount()`.
 
+## An absent scope record is unknown, not missing
+
+The same trap as the client binding above, one field over. `scopes` records what Google actually granted, and accounts saved before the field existed have `null`.
+
+Treating `null` as "no scopes granted" would refuse `ytstats transcript` for **every** account created before the upgrade — telling those users to re-authorize to fix a problem most of them do not have, and doing it on the strength of a record that simply was not being kept yet. So the pre-flight check fires only for a **present array that lacks** the captions scope; anything else lets the call proceed and lets a genuine Google 403 speak instead.
+
+The refresh write-back is the other half, exactly as with `clientId`: `client.on('tokens', …)` calls `saveAccount()` with a partial payload and no scopes, so `saveAccount()` falls back to the stored value. Dropping it there would blank the record one refresh after login — which is to say, almost immediately, and silently.
+
+The related rule is that the value is never **synthesized**. If Google's token response carries no `scope`, `ytstats` stores `null` rather than assuming it got what it asked for. A fabricated grant record is worse than an absent one, because the scope check trusts what it reads: it would refuse a call the token can make, or wave through one it cannot.
+
+**Where handled:** `captionsScopeMissing()` in `src/auth/oauth.js`; the `scopes ?? existing?.scopes ?? null` fallback in `saveAccount()` (`src/auth/tokens.js`); the `tokens.scope ? … : null` read in `login()` (`src/auth/session.js`).
+
 ## The account selector is checked before the client binding
 
 `getAuthenticatedClient()` resolves credentials, then the account, then the binding. An unknown `--account` is the more specific complaint, and reporting a client mismatch for a channel that is not signed in at all would misdirect exactly the way the ordering elsewhere in this file exists to prevent.

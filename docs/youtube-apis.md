@@ -61,6 +61,21 @@ youtube.videos.list({
 
 1 quota unit per batch. `liveStreamingDetails` is requested because `classifyContent()` uses its presence to identify live streams.
 
+### Captions
+
+Two fetchers in `src/api/captions.js`, plus `fetchTranscript()` which chains them. These are the only calls in `ytstats` that need a scope outside the read-only default — see [the gotcha](gotchas/youtube-api.md#captions-have-no-read-only-scope-and-only-work-on-videos-you-own).
+
+```js
+youtube.captions.list({ part: 'snippet', videoId })
+youtube.captions.download({ id: trackId, tfmt: 'vtt' })
+```
+
+`captions.list` returns the tracks with `{ id, language, trackKind, isAutoSynced, isDraft, lastUpdated }`. `lastUpdated` is load-bearing rather than informational: it is what the transcript cache keys on, because captions can be edited after upload and listing is far cheaper than downloading.
+
+`selectCaptionTrack()` prefers an author-written track over `ASR`, skips drafts, and the chosen track is reported in the output rather than applied silently. `captions.download` requires edit permission on the video, so this only works for videos you own.
+
+Tests assert the exact parameters (`part`, `videoId`, `id`, `tfmt`), as with every other fetcher.
+
 ### Quota costs
 
 | Operation | Cost |
@@ -68,7 +83,13 @@ youtube.videos.list({
 | `channels.list` | 1 |
 | `playlistItems.list` | 1 per page of 50 |
 | `videos.list` | 1 per batch of 50 |
+| `captions.list` | 50 |
+| `captions.download` | 200 |
 | `search.list` | **100** — never used |
+
+`captions.download` at 200 units is the most expensive single call `ytstats` makes — roughly 50 transcripts against the 10,000/day Data API budget, and 250× a `videos.list` batch. That is why `transcript` is one video at a time with no bulk mode, and why its cache is load-bearing rather than an optimisation: a re-run that skips the download saves 200 units and costs 50.
+
+The two figures come from different pages, which is easy to trip over: `captions.list` is in the [quota calculator](https://developers.google.com/youtube/v3/determine_quota_cost), but `captions.download` is **not** listed there at all — its cost is stated only on [its own reference page](https://developers.google.com/youtube/v3/docs/captions/download) ("A call to this method has a quota cost of 200 units"). Both verified 2026-07-30.
 
 The Data API grants 10,000 units/day per project. A full fetch for a 100-video channel costs roughly 5 units. The Analytics and Reporting APIs have separate quotas.
 

@@ -20,10 +20,10 @@ Contributor-facing notes on how `ytstats` is built and why. For the command surf
 bin/ytstats.js          thin shim; last-resort guard against stdout pollution
   └─ src/cli.js         command definitions, validation ordering, error capture
        ├─ src/auth/     credentials, OAuth, token store, session
-       ├─ src/api/      Data v3, Analytics v2, Reporting v1, pure transforms
+       ├─ src/api/      Data v3, Analytics v2, Reporting v1, captions, pure transforms
        ├─ src/fetch-all.js   one-document orchestrator with per-step degradation
        ├─ src/sync.js        pulls expiring Reporting API output into the archive
-       ├─ src/archive.js     append-only local store for Reporting API data
+       ├─ src/archive.js     local store: Reporting API rows, and cached transcripts
        ├─ src/output.js      the envelope; stdout/stderr discipline
        ├─ src/diagnostics.js the failure catalog
        ├─ src/errors.js      YtStatsError, Google error classification, redaction
@@ -35,7 +35,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 ## Design principles
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 422 tests run without a network connection and without opening a browser.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 480 tests run without a network connection and without opening a browser.
 
 `buildProgram({ makeApis })` is part of that seam: it defaults to `createApis` and exists so a test can drive an **authenticated** command with a fake API bundle. Before it, `createApis` was called directly inside `withApis`, which made every post-auth code path — including which warnings a command emits — unreachable from the suite.
 
@@ -43,7 +43,11 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 **No native dependencies.** `npx ytstats` must start instantly, which rules out anything requiring a prebuild download or a node-gyp compile. Runtime dependencies are `commander`, `googleapis`, and `open` — all pure JS. Think hard before adding a fourth.
 
-**Read-only by design.** Only three read-only scopes are ever requested (`SCOPES` in `src/auth/oauth.js`). `ytstats` has no code path that modifies a channel.
+**Read-only by default, and write access is opt-in only.** The default grant is three read-only scopes (`SCOPES` in `src/auth/oauth.js`), and `ytstats` has no code path that modifies a channel — it only ever reads.
+
+One feature needs more than that: captions. Google offers no read-only scope for `captions.list` or `captions.download`, only the write-capable `youtube.force-ssl`, so `ytstats transcript` cannot work without it. That scope is therefore requested by **`ytstats login --with-captions` and nothing else** (`CAPTIONS_SCOPE`, deliberately not part of `SCOPES`, which a test pins at exactly three entries).
+
+The distinction that matters: the tool asks for write capability in that one case because Google offers no narrower scope, but it still never writes. What a user consents to by default is unchanged, and an existing user who never runs `--with-captions` is unaffected.
 
 **The consumer is assumed to be a program.** stdout carries exactly one JSON document on every code path; diagnostics are structured, coded, and carry runnable remediation. See [output-contract.md](output-contract.md).
 
@@ -54,7 +58,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 | `config/paths.js` | Per-OS config dir. Pure — platform, env, and home are injected, so Windows and Linux behaviour is asserted from any machine. |
 | `config/store.js` | Atomic `0600` JSON read/write, traversal-safe filenames. |
 | `auth/credentials.js` | BYO credential resolution and validation. Rejects service accounts and malformed client IDs before they cost a browser round trip. |
-| `auth/oauth.js` | PKCE pair, CSRF state, loopback callback server, auth URL builder, scope list. |
+| `auth/oauth.js` | PKCE pair, CSRF state, loopback callback server, auth URL builder, the default scope list and the opt-in captions scope. |
 | `auth/tokens.js` | Multi-account token store keyed by channel; records which OAuth client issued each account's token; legacy import. |
 | `auth/session.js` | Ties the above together: `login`, `logout`, `getAuthenticatedClient` with refresh persistence. |
 | `api/client.js` | Builds the three API surfaces plus an authenticated CSV downloader; wraps calls in error mapping. |
@@ -62,8 +66,9 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 | `api/data.js` | Data API v3 fetchers — channel, video ids, video resources. |
 | `api/analytics.js` | Analytics API v2 fetchers, with the undocumented limits encoded as constants. |
 | `api/reporting.js` | Reporting API v1 job lifecycle and reach download. |
+| `api/captions.js` | Data API v3 caption track listing, selection and download. The only fetchers needing the opt-in scope. |
 | `fetch-all.js` | Orchestrates every dataset into one document, degrading per step. |
-| `archive.js` | Append-only NDJSON store for Reporting API rows, with last-wins replay. Pure filesystem — no network. |
+| `archive.js` | Append-only NDJSON store for Reporting API rows, with last-wins replay; also the one-document-per-video transcript cache. Pure filesystem — no network. |
 | `sync.js` | Downloads reports not yet archived. The only module that spans the API and the archive. |
 | `dates.js` | Reporting window resolution and validation. |
 | `output.js` | The envelope and the stdout/stderr split. |
@@ -116,14 +121,14 @@ The exported surface, grouped:
 | Session | `getAuthenticatedClient`, `login`, `logout`, `identifyLegacyTokens` |
 | Credentials | `resolveCredentials`, `saveCredentials`, `clearCredentials`, `loadStoredCredentials`, `discoverClientSecretFile`, `parseClientSecret` |
 | Accounts | `loadAccount`, `listAccounts`, `saveAccount`, `removeAccount`, `setDefaultAccount`, `clearAllAccounts`, `migrateLegacyTokens` |
-| APIs | `createApis`, `data`, `analytics`, `reporting` (namespace exports), plus everything in `api/transforms.js` |
+| APIs | `createApis`, `data`, `analytics`, `reporting`, `captions` (namespace exports), plus everything in `api/transforms.js` |
 | Orchestration | `fetchAll`, `syncReports`, `findExpiringReports` |
-| Archive | `dataDir`, `resolveDataDir`, `appendRows`, `readRows`, `archiveStatus`, `keyColumns`, `daysUntilExpiry` |
+| Archive | `dataDir`, `resolveDataDir`, `appendRows`, `readRows`, `archiveStatus`, `keyColumns`, `daysUntilExpiry`, `readTranscript`, `writeTranscript` |
 | Dates | `resolveDateRange`, `daysBetween`, `toIsoDate` |
 | Output | `renderEnvelope`, `createReporter` |
 | Errors | `YtStatsError`, `ERROR_CODES`, `EXIT_CODES`, `mapGoogleError`, `diagnoseGoogleError`, `fail`, `redact` |
 | Diagnostics | `DIAGNOSTICS`, `diagnose`, `isDiagnostic`, `SEVERITY`, `EXIT` |
-| CLI | `buildProgram`, `main`, `SCOPES`, `configDir` |
+| CLI | `buildProgram`, `main`, `SCOPES`, `CAPTIONS_SCOPE`, `configDir` |
 
 Library callers get no envelope: `fetchAll` returns its result object directly and fetchers throw `YtStatsError`. Use `renderEnvelope()` if you want the CLI's output shape.
 

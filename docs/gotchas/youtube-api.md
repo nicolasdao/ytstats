@@ -21,6 +21,29 @@ This is a [known Google issue](https://issuetracker.google.com/issues/254665034)
 
 **Where handled:** `src/api/reporting.js`. Never add these metrics to `src/api/analytics.js` — a test asserts they are absent.
 
+## Captions have no read-only scope, and only work on videos you own
+
+Both `captions.list` and `captions.download` require `https://www.googleapis.com/auth/youtube.force-ssl` (or `youtubepartner`). There is **no** read-only variant — `youtube.readonly` is not accepted for either. Google presents `force-ssl` to the user as *"Manage your YouTube account"*: full read/write.
+
+That single fact is why `ytstats` cannot simply add captions to its default grant. Three read-only scopes is a promise every existing user consented to, and a new scope also invalidates existing consent — so widening the default would both break the promise and force every user to re-authorize. Hence `login --with-captions`, which is the only thing that ever requests it.
+
+`captions.download` additionally requires permission to **edit** the video, so it works only for videos on a channel the signed-in user owns. There is no path to another creator's transcript, by design of the API rather than by choice here.
+
+Two consequences worth keeping straight:
+
+- A 403 on `captions.download` for your own video usually means the scope, not the ownership.
+- A stored account whose `scopes` array lacks `force-ssl` is refused **before** the call, as `AUTH_SCOPE_MISSING`, so the user gets `ytstats login --with-captions` instead of an opaque Google 403.
+
+**Where handled:** `CAPTIONS_SCOPE` and `captionsScopeMissing()` in `src/auth/oauth.js`; the fetchers in `src/api/captions.js`; the pre-flight check in the `transcript` command (`src/cli.js`). `SCOPES` stays at exactly three entries and a test asserts it.
+
+## An auto-generated caption track is a different claim from an author-written one
+
+`captions.list` returns both kinds, distinguished by `trackKind` — `ASR` is speech recognition, anything else was written or uploaded by the author. ASR mishears names, jargon and anything said over music.
+
+Since the reason to pull a transcript here is finding out *what was said* at a retention drop-off, a mistranscribed line leads to the wrong editing decision. `ytstats` prefers a manual track and falls back to ASR, but **reports which one it used** (`trackKind` in the output) rather than choosing silently. Draft tracks are skipped entirely: an unpublished track is not what viewers saw.
+
+**Where handled:** `selectCaptionTrack()` in `src/api/captions.js`, pinned by tests.
+
 ## Reporting API data is always 1-2 days behind
 
 Reports cover midnight-to-midnight Pacific Time and are generated 1-2 days after the period closes, so `ytstats reach` never returns data for today or yesterday.

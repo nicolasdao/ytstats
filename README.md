@@ -144,6 +144,7 @@ ytstats geography [-n 50]
 ytstats playback-locations
 ytstats video-analytics               # per-video, top 200 by views
 ytstats retention <videoId>           # where viewers drop off, and whether they left or skipped
+ytstats transcript <videoId>          # caption transcript with cue timings (needs login --with-captions)
 ytstats reach                         # thumbnail impressions and CTR
 ytstats reports                       # which report types are collecting — and which are not
 ytstats reports-enable --all          # start collecting the ones that are not
@@ -209,7 +210,7 @@ Library callers get no envelope: `fetchAll` returns its result object directly a
 
 ## Drive it from an AI agent
 
-There is a published agent skill that operates **the entire CLI** — all 26 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
+There is a published agent skill that operates **the entire CLI** — all 27 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
 
 ```
 nicolasdao/ytstats@0.1.0        install with HappySkills
@@ -243,6 +244,8 @@ The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own 
 
 **Retention says more than one number.** `stoppedWatching` is viewers leaving; `startedWatching` is viewers skipping ahead to that point. A dip means opposite things depending on which one moved, and `ratio` alone cannot tell them apart. `relativeRetentionPerformance` compares the curve to similar YouTube videos rather than to itself.
 
+**Transcripts need an extra permission, and it is not read-only.** `ytstats transcript` reads captions, and Google offers no read-only scope for them — `captions.list` and `captions.download` both require `youtube.force-ssl`, which the consent screen calls "Manage your YouTube account". So it is opt-in: run `ytstats login --with-captions` once. Everything else keeps the three read-only scopes, and `ytstats` never writes to a channel with either grant. Adding it later keeps the permissions you already granted.
+
 **CTR only comes from `ytstats reach`.** The Analytics API documents `videoThumbnailImpressions` but it has never worked ([issue 254665034](https://issuetracker.google.com/issues/254665034)). CTR is served asynchronously by the Reporting API instead: the first `reach` run only creates a job, and data appears **24-48 hours later** with a 30-day backfill. It's also permanently 1-2 days behind — the same lag YouTube Studio shows.
 
 **Retention ratios above 1.0 are correct.** A Short showing `1.54` means viewers looped it. Not a bug, and never clamped.
@@ -269,16 +272,16 @@ src/
   cli.js             command definitions, validation ordering, error capture
   index.js           the library entry point
   auth/              credentials, OAuth loopback flow, token store, session
-  api/               Data v3, Analytics v2, Reporting v1, pure transforms
+  api/               Data v3, Analytics v2, Reporting v1, captions, pure transforms
   config/            per-user config dir, atomic 0600 store
   fetch-all.js       one-document orchestrator with per-step degradation
   sync.js            pulls expiring Reporting API output into the archive
-  archive.js         append-only local store for Reporting API data
+  archive.js         local store: Reporting API rows, and cached transcripts
   output.js          the envelope; stdout/stderr discipline
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                422 tests, none requiring network access
+test/                480 tests, none requiring network access
 docs/                topic documentation, indexed below
 .agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```

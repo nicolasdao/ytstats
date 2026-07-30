@@ -21,7 +21,7 @@ The cost is roughly five minutes of one-time Google Cloud setup, walked through 
 
 ## Scopes
 
-Three, all read-only, frozen in `src/auth/oauth.js`:
+The default grant is three, all read-only, frozen in `src/auth/oauth.js`:
 
 ```js
 export const SCOPES = Object.freeze([
@@ -31,7 +31,33 @@ export const SCOPES = Object.freeze([
 ]);
 ```
 
-There is no code path that writes to a channel.
+There is no code path that writes to a channel, with any grant.
+
+### The opt-in captions scope
+
+One feature needs a fourth: `ytstats transcript`. Google offers **no read-only scope** for `captions.list` or `captions.download` — both require `youtube.force-ssl`, which the consent screen describes as *"Manage your YouTube account"*. So the scope is write-capable even though `ytstats` only reads with it.
+
+```js
+export const CAPTIONS_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
+```
+
+It is **deliberately not in `SCOPES`**, and a test pins that list at exactly three entries. It is requested by one command and nothing else:
+
+```bash
+ytstats login --with-captions
+```
+
+Two reasons the default stays narrow. Read-only is what every existing user consented to, and quietly widening it would break that promise for people who never asked for transcripts. And a new scope invalidates existing consent regardless — so adding it to the default would force *every* user to re-authorize to gain a feature most of them do not want.
+
+**Existing grants are preserved, not replaced.** `buildAuthUrl` already sets `include_granted_scopes=true`, so Google's incremental authorization applies: running `login --with-captions` later adds the captions scope on top of what you already granted rather than swapping it in.
+
+`captions.download` also requires permission to edit the video, so transcripts only work for videos on a channel you own. See [the gotcha](gotchas/youtube-api.md#captions-have-no-read-only-scope-and-only-work-on-videos-you-own).
+
+### What was actually granted
+
+Because the grant now varies, it is recorded rather than inferred. `login()` reads the space-separated `scope` string off Google's token response and stores it as an array on the account; `ytstats status` prints it per account.
+
+If the response carries no `scope`, `ytstats` stores `null` — it never synthesizes the value from `SCOPES`. `null` therefore means **unknown**, which is also what accounts saved before the field existed hold, and it is treated as "attempt the call" rather than "refuse it". Only a present array that lacks the captions scope produces `AUTH_SCOPE_MISSING` before the request. See [the gotcha](gotchas/auth.md#an-absent-scope-record-is-unknown-not-missing).
 
 ## Credential resolution
 
@@ -82,11 +108,11 @@ Two tiers:
 1. **Resolve and validate credentials** — as above, before anything else happens.
 2. **Generate a PKCE pair (S256) and an unguessable `state`.** The verifier is 64 random bytes base64url-encoded (86 characters, within RFC 7636's 43-128 range — the `slice(0, 128)` is a ceiling that never triggers at this size); the challenge is its base64url SHA-256 digest, 43 characters. The state is 24 random bytes, 32 characters. PKCE protects the authorization code against interception by another local process racing on the loopback port.
 3. **Bind an HTTP server to `127.0.0.1` on an ephemeral port** — `server.listen(0, '127.0.0.1')`, never `0.0.0.0`.
-4. **Open the browser** at Google's authorization endpoint with `access_type=offline&prompt=consent` (what makes Google return a refresh token) and `include_granted_scopes=true`.
+4. **Open the browser** at Google's authorization endpoint with `access_type=offline&prompt=consent` (what makes Google return a refresh token) and `include_granted_scopes=true` (what makes a later `--with-captions` additive). The scope list is the default three, or those plus `CAPTIONS_SCOPE` when `--with-captions` was passed.
 5. **Capture the callback.** The handler 404s `/favicon.ico` and any path other than `/` or `/callback`, then compares the returned `state` in constant time via `crypto.timingSafeEqual`. A mismatch, a Google `error` parameter, or a missing code each rejects with its own diagnostic.
 6. **Exchange the code** with the PKCE verifier and the same `redirect_uri` used in the authorization request.
 7. **Fetch the channel identity** via `channels.list({ part: 'snippet,contentDetails', mine: true })` — *before* persisting, so a failed lookup cannot leave a half-written account behind.
-8. **Persist** the credentials and the account.
+8. **Persist** the credentials and the account, including the scopes Google reported granting.
 
 The success page served to the browser contains no token material and never echoes the authorization code. A test asserts this.
 
@@ -114,6 +140,7 @@ Tokens live in `tokens.json` inside the per-user config directory (see [configur
       "channelTitle": "…",
       "customUrl": "@…",
       "clientId": "123456789012-abc.apps.googleusercontent.com",
+      "scopes": ["https://www.googleapis.com/auth/youtube.readonly", "…"],
       "tokens": { "access_token": "…", "refresh_token": "…", "expiry_date": 0 },
       "savedAt": "2026-07-27T10:00:00.000Z"
     }
@@ -123,7 +150,7 @@ Tokens live in `tokens.json` inside the per-user config directory (see [configur
 
 Keyed by channel, so one machine can hold several. The first account logged in wins `default`; `ytstats use` changes it.
 
-**Saving merges rather than replaces.** A refresh response from Google contains a new `access_token` but no `refresh_token`, so `saveAccount()` spreads the existing tokens under the new ones. Overwriting would destroy the long-lived credential. `clientId` falls back the same way, because the refresh write-back path calls `saveAccount()` without one.
+**Saving merges rather than replaces.** A refresh response from Google contains a new `access_token` but no `refresh_token`, so `saveAccount()` spreads the existing tokens under the new ones. Overwriting would destroy the long-lived credential. `clientId` and `scopes` fall back the same way, because the refresh write-back path calls `saveAccount()` with neither.
 
 ### The client binding
 
@@ -177,6 +204,7 @@ An unrecognised selector returns `null` — never a silent fallback to the defau
 | Callback never arrived | `AUTH_TIMEOUT` |
 | State check failed | `AUTH_STATE_MISMATCH` |
 | Service account key supplied | `AUTH_SERVICE_ACCOUNT` |
+| Signed in without the captions scope, and `transcript` was run | `AUTH_SCOPE_MISSING` |
 | Client ID malformed | `AUTH_CLIENT_ID_INVALID` |
 | Google account owns no channel | `AUTH_NO_CHANNEL` |
 
