@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-30
+
 ### Fixed
 
 - **`ytstats transcript` returned zero cues for every video on 0.7.0.** The
@@ -336,7 +338,8 @@ Initial release.
 - Client ID pre-flight validation, so a malformed OAuth client fails immediately
   instead of hanging until the browser callback times out.
 
-[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/nicolasdao/ytstats/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/nicolasdao/ytstats/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/nicolasdao/ytstats/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/nicolasdao/ytstats/compare/v0.5.0...v0.6.0
