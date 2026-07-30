@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
-import { createPkcePair, buildAuthUrl, startLoopbackServer, SCOPES, CAPTIONS_SCOPE } from '../../src/auth/oauth.js';
+import {
+  createPkcePair,
+  buildAuthUrl,
+  startLoopbackServer,
+  SCOPES,
+  CAPTIONS_SCOPE,
+  captionsScopeMissing,
+} from '../../src/auth/oauth.js';
 import { ERROR_CODES } from '../../src/errors.js';
 
 const base64url = buf => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -99,6 +106,29 @@ describe('the captions scope stays out of the default grant', () => {
 
   it('is force-ssl, because captions have no read-only scope', () => {
     expect(CAPTIONS_SCOPE).toBe('https://www.googleapis.com/auth/youtube.force-ssl');
+  });
+});
+
+describe('captionsScopeMissing treats an absent grant as unknown', () => {
+  it('reports missing only for a recorded grant that lacks the scope', () => {
+    expect(captionsScopeMissing({ scopes: [...SCOPES] })).toBe(true);
+  });
+
+  it('reports present when the scope was granted', () => {
+    expect(captionsScopeMissing({ scopes: [...SCOPES, CAPTIONS_SCOPE] })).toBe(false);
+  });
+
+  it('does not report missing when scopes were never recorded', () => {
+    // The upgrade path: accounts stored before the field existed have null, and
+    // refusing them would log everyone out of a feature to fix a problem most of
+    // them do not have. Let the call run and a real Google 403 speak instead.
+    expect(captionsScopeMissing({ scopes: null })).toBe(false);
+    expect(captionsScopeMissing({})).toBe(false);
+    expect(captionsScopeMissing(undefined)).toBe(false);
+  });
+
+  it('reports missing for an empty recorded grant, which is a real answer', () => {
+    expect(captionsScopeMissing({ scopes: [] })).toBe(true);
   });
 });
 

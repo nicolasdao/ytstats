@@ -29,6 +29,19 @@ export const SCOPES = Object.freeze([
  */
 export const CAPTIONS_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 
+/**
+ * Whether a stored account is KNOWN to lack caption access.
+ *
+ * An absent `scopes` field means unknown, not missing: accounts saved before the
+ * field existed have none, and treating that as "missing" would refuse every
+ * pre-upgrade account — telling users to re-authorize to fix a problem most of
+ * them do not have. Only a present array that lacks the scope is a real answer;
+ * anything else lets the call proceed so a genuine Google 403 can speak instead.
+ */
+export function captionsScopeMissing(account) {
+  return Array.isArray(account?.scopes) && !account.scopes.includes(CAPTIONS_SCOPE);
+}
+
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 

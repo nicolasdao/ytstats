@@ -209,6 +209,37 @@ export const DIAGNOSTICS = {
     },
   }),
 
+  AUTH_SCOPE_MISSING: def({
+    code: 'AUTH_SCOPE_MISSING',
+    exitCode: EXIT.AUTH,
+    recoverable: true,
+    // Re-running the same command cannot help: the stored grant stays what it is
+    // until the user re-authorizes in a browser.
+    retryable: false,
+    title: 'Signed in without the permission this command needs',
+    detail:
+      'This command needs caption access, and the stored authorization for this channel does not ' +
+      'include it. Caption access is opt-in: ytstats requests three read-only scopes by default, ' +
+      'because the only scope Google offers for captions (youtube.force-ssl) is write-capable.',
+    cause:
+      'This channel was signed in with a plain `ytstats login`, which deliberately does not request ' +
+      'caption access.',
+    remediation: {
+      summary: 'Re-authorize with --with-captions; permissions already granted are kept, not replaced.',
+      steps: [
+        'Run: ytstats login --with-captions',
+        'This re-opens the browser. Google describes the new permission as managing your YouTube account — that is the only scope captions have, and ytstats only reads with it.',
+        'Permissions you already granted are preserved rather than replaced, because ytstats requests incremental authorization.',
+        'Run: ytstats status  — the scopes array on the account confirms what was granted.',
+      ],
+      commands: [
+        { run: 'ytstats login --with-captions', description: 'Re-authorize this machine, adding caption access' },
+        STATUS_CMD,
+      ],
+      docs: ['https://developers.google.com/youtube/v3/docs/captions/download'],
+    },
+  }),
+
   AUTH_CONSENT_DECLINED: def({
     code: 'AUTH_CONSENT_DECLINED',
     exitCode: EXIT.AUTH,
