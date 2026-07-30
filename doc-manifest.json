@@ -284,7 +284,7 @@
         "Shipping to production",
         "Documentation"
       ],
-      "line_count": 183,
+      "line_count": 184,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -616,7 +616,7 @@
         "What is not covered",
         "Adding tests"
       ],
-      "line_count": 101,
+      "line_count": 105,
       "links_to": [
         "docs/contributing.md"
       ],

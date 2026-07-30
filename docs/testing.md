@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-480 tests across 17 files. **None of them requires network access**, and none opens a browser.
+486 tests across 17 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 
@@ -36,7 +36,7 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 |---|---|---|
 | `test/envelope.test.js` | 106 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
 | `test/api/fetchers.test.js` | 49 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher; metric tiers; job coverage |
-| `test/api/captions.test.js` | 24 | Exact caption query parameters, track selection, and the VTT/SRT cue parser pinned to real values |
+| `test/api/captions.test.js` | 30 | Exact caption query parameters, track selection, and the cue parser — pinned to a verbatim capture of live YouTube output |
 | `test/cli.e2e.test.js` | 43 | The real binary, spawned as a subprocess |
 | `test/api/transforms.test.js` | 33 | Duration parsing, content classification, CSV, date normalization, row zipping |
 | `test/auth/credentials.test.js` | 31 | Resolution precedence across all five sources, file shapes, service-account rejection, discovery |
@@ -99,3 +99,7 @@ For a new diagnostic, the catalog test fails unless the entry has a title, detai
 For anything touching the config store, use `useTempConfigDir()` rather than writing to the real directory.
 
 **Assert a value, not just a shape, whenever a transform maps external column or field names.** A test checking `rows.length` passes against a result where every field is `null` — which is exactly how the reach CSV column mismatch survived: correct row count, correct keys, no error, and nothing but nulls behind them. Pin such transforms with a fragment of the real payload and assert an actual number came through.
+
+**Use a captured payload, not one you wrote.** The stronger form of the rule above, and the one this project has now paid for twice. A fixture you author encodes what you *believe* the API returns, so a test built on it verifies your belief against itself and passes no matter how wrong the belief is. `ytstats` 0.7.0 shipped a `transcript` command that returned zero cues for every video: `captions.download` hands its body back as a **Blob**, the fixtures were strings, and every test passed. Two further mismatches hid in the same fixture — `trackKind` arrives lowercase, and real auto-captions repeat each cue's text — so three independent defects survived a green suite.
+
+Capture the real thing once, paste it in verbatim, and say so in a comment. `REAL_ASR_VTT` in `test/api/captions.test.js` is the pattern: an ugly, awkward string with whitespace-only lines and inline markup, marked *do not tidy this*. Its awkwardness is the test. The cost is one live call while developing; the alternative cost is a released feature that does not work.

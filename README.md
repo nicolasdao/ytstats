@@ -281,7 +281,7 @@ src/
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                480 tests, none requiring network access
+test/                486 tests, none requiring network access
 docs/                topic documentation, indexed below
 .agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```

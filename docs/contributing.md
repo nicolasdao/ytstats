@@ -15,6 +15,7 @@ How to change `ytstats` without breaking the contracts it makes. Read [architect
 
 1. **Add the fetcher** to the relevant `src/api/*.js`, taking `apis` as its first argument so it stays injectable.
 2. **Add a test asserting the exact query parameters**, not just the return shape. That is what protects the undocumented API limits — a test that only checks returned rows lets someone raise `maxResults` and reintroduce an opaque failure.
+   **Build the response fixture from a captured payload, not from memory.** Asserting the request precisely while inventing the response verifies only that the code matches your assumptions about the API. That is how `transcript` shipped broken in 0.7.0 — the request parameters were right, the fabricated response was a string, and the real one is a Blob. See [testing.md](testing.md#adding-tests).
 3. **Wire it into `fetch-all.js` behind `step()`** so a failure degrades to a warning rather than aborting the whole run.
 4. **Add a dedicated command in `cli.js`** if it is independently useful. Most analytics datasets can use the `simple()` helper, which supplies the date flags, the range validation, and the `DATA_EMPTY` warning.
 5. **Add a diagnostic to `diagnostics.js`** if it introduces a new failure mode. The catalog test fails unless the entry has a title, detail, cause, and at least one remediation step.
