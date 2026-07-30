@@ -84,7 +84,7 @@ describe('transcript command', () => {
       videoId: HYPHEN_ID,
       trackId: 'track-1',
       language: 'en',
-      trackKind: 'standard',
+      trackKind: 'STANDARD',
       lastUpdated: '2026-07-01T10:00:00Z',
     });
   });

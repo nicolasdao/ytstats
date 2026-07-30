@@ -25,6 +25,20 @@ the dip is not always the problem.
 Let me show you what I mean.
 `;
 
+/**
+ * A VERBATIM excerpt of what YouTube actually returned for a real ASR track
+ * (video 4vllqHl-BLk, captured 2026-07-30). Every quirk below broke the parser
+ * when it was pinned only to a hand-written fixture:
+ *   - a WHITESPACE-ONLY line inside the first cue (line 6)
+ *   - rolling captions: each cue repeats the previous cue's text
+ *   - word-level timings as inline markup: Here<00:00:00.400><c> are</c>
+ * Do not "tidy" this string. Its awkwardness is the test.
+ */
+const REAL_ASR_VTT = "WEBVTT\nKind: captions\nLanguage: en\n\n00:00:00.000 --> 00:00:03.270 align:start position:0%\n \nHere<00:00:00.400><c> are</c><00:00:00.880><c> three</c><00:00:01.199><c> warning</c><00:00:01.600><c> signs</c><00:00:02.080><c> that</c><00:00:02.480><c> AI</c>\n\n00:00:03.270 --> 00:00:03.280 align:start position:0%\nHere are three warning signs that AI\n \n\n00:00:03.280 --> 00:00:07.190 align:start position:0%\nHere are three warning signs that AI\nmight<00:00:03.679><c> be</c><00:00:03.919><c> burning</c><00:00:04.319><c> you</c><00:00:04.560><c> out.</c><00:00:05.520><c> One,</c><00:00:06.560><c> you</c><00:00:06.879><c> can't</c>\n";
+
+/** googleapis returns captions.download as a Blob, not a string. */
+const blob = text => ({ text: async () => text });
+
 function captionsApi({ items = [], body = VTT } = {}) {
   const calls = { list: [], download: [] };
   return {
@@ -63,7 +77,8 @@ describe('captions.list', () => {
     expect(t).toEqual({
       id: 'track-1',
       language: 'en',
-      trackKind: 'standard',
+      // Normalized: the API returns "standard" lowercase.
+      trackKind: 'STANDARD',
       isAutoSynced: false,
       isDraft: false,
       // The cache key: captions can be edited after upload.
@@ -113,6 +128,56 @@ describe('captions.download', () => {
     const apis = captionsApi();
     const { cues } = await downloadCaptionTrack(apis, 'track-1');
     expect(cues).toHaveLength(3);
+  });
+});
+
+describe('real YouTube payloads — the shapes a hand-written fixture hides', () => {
+  it('reads a Blob body, which is what googleapis actually returns', async () => {
+    // String(blob) is "[object Blob]" and parses to zero cues, while ok stays true
+    // and a track is still reported. Shipped once; pinned now.
+    const apis = captionsApi({ items: [track()], body: blob(REAL_ASR_VTT) });
+    const { cues } = await downloadCaptionTrack(apis, 'track-1');
+    expect(cues.length).toBeGreaterThan(0);
+    expect(cues[0].text).toBe('Here are three warning signs that AI');
+  });
+
+  it('normalizes trackKind, which the API returns lowercase', async () => {
+    // Google documents ASR/standard/forced in capitals and returns "asr".
+    const apis = captionsApi({ items: [track({ trackKind: 'asr' })] });
+    const [t] = await listCaptionTracks(apis, 'v1');
+    expect(t.trackKind).toBe('ASR');
+  });
+
+  it('still prefers a manual track when the API says "asr" in lowercase', () => {
+    // A raw !== 'ASR' comparison classified every auto track as author-written,
+    // silently inverting the preference this function exists to express.
+    const chosen = selectCaptionTrack([
+      { id: 'asr', trackKind: 'asr', language: 'en', isDraft: false },
+      { id: 'manual', trackKind: 'standard', language: 'en', isDraft: false },
+    ]);
+    expect(chosen.id).toBe('manual');
+  });
+
+  it('parses the real rolling ASR track without losing or repeating lines', () => {
+    const cues = parseCues(REAL_ASR_VTT);
+
+    // Three source cues collapse to two: the middle one only repeats the first.
+    expect(cues).toEqual([
+      { start: 0, end: 3.27, text: 'Here are three warning signs that AI' },
+      { start: 3.28, end: 7.19, text: "might be burning you out. One, you can't" },
+    ]);
+  });
+
+  it('keeps the opening line despite the whitespace-only line inside the cue', () => {
+    // Trimming before the blank-line check dropped the first cue of every ASR track.
+    expect(parseCues(REAL_ASR_VTT)[0].start).toBe(0);
+  });
+
+  it('does not repeat a sentence at several timestamps', () => {
+    // Rolling captions restate prior text; emitting it each time would make the
+    // "what was said at this moment" reading wrong, not merely verbose.
+    const texts = parseCues(REAL_ASR_VTT).map(c => c.text);
+    expect(new Set(texts).size).toBe(texts.length);
   });
 });
 
@@ -169,7 +234,7 @@ describe('fetchTranscript', () => {
     expect(apis.calls.list).toEqual([{ part: 'snippet', videoId: 'dQw4w9WgXcQ' }]);
     expect(apis.calls.download).toEqual([{ id: 'track-1', tfmt: 'vtt' }]);
     // The choice is never silent: which track spoke is part of the answer.
-    expect(result.track).toMatchObject({ id: 'track-1', trackKind: 'standard', language: 'en' });
+    expect(result.track).toMatchObject({ id: 'track-1', trackKind: 'STANDARD', language: 'en' });
     expect(result.cues).toHaveLength(3);
   });
 

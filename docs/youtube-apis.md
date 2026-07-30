@@ -72,7 +72,11 @@ youtube.captions.download({ id: trackId, tfmt: 'vtt' })
 
 `captions.list` returns the tracks with `{ id, language, trackKind, isAutoSynced, isDraft, lastUpdated }`. `lastUpdated` is load-bearing rather than informational: it is what the transcript cache keys on, because captions can be edited after upload and listing is far cheaper than downloading.
 
+Two shapes differ from the documentation and are normalized here: `trackKind` arrives **lowercase** (`"asr"`, not `"ASR"`) and is uppercased, and `captions.download` returns a **Blob** rather than a string. Both are covered in [the gotchas](gotchas/youtube-api.md#captionsdownload-returns-a-blob-and-string-on-it-yields-object-blob).
+
 `selectCaptionTrack()` prefers an author-written track over `ASR`, skips drafts, and the chosen track is reported in the output rather than applied silently. `captions.download` requires edit permission on the video, so this only works for videos you own.
+
+`parseCues()` also de-duplicates YouTube's rolling auto-captions, where each cue restates the previous cue's text before adding new words — emitting them verbatim would put the same sentence at several timestamps.
 
 Tests assert the exact parameters (`part`, `videoId`, `id`, `tfmt`), as with every other fetcher.
 

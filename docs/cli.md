@@ -294,7 +294,7 @@ Returns `{ videoId, trackId, language, trackKind, lastUpdated, cachedAt, cues }`
 |---|---|
 | `start` | Cue start, in **seconds as a number** — not a timestamp string |
 | `end` | Cue end, same units |
-| `text` | What was said, with multi-line cues joined and markup stripped |
+| `text` | What was said, with multi-line cues joined and markup stripped. Rolling auto-caption repetition is removed, so a sentence appears once, at the moment it was said |
 
 Seconds because retention's x-axis is `elapsedVideoTimeRatio`, a fraction of the video: aligning the two needs numbers and the video's duration (from `ytstats videos`). The join is deliberately left to the consumer — `ytstats` emits the two primitives rather than a correlation it would have to guess the shape of.
 

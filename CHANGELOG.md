@@ -6,6 +6,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ytstats transcript` returned zero cues for every video on 0.7.0.** The
+  command was unusable as shipped. Three defects, all invisible to unit tests
+  because the fixtures were hand-written rather than captured from the API —
+  the same lesson as the reach CSV regression, relearned:
+  - `captions.download` hands its body back as a **Blob**, not a string.
+    `String(blob)` is the literal `"[object Blob]"`, which parses to no cues
+    while every other signal still reads as success: `ok: true`, a track chosen
+    and reported, a cache file written, and a `DATA_EMPTY` warning saying the
+    track "contained no cues" — indistinguishable from a video whose captions
+    really are empty. `readBody()` now handles string, `Buffer`, `.text()` and
+    `.arrayBuffer()` explicitly.
+  - `trackKind` arrives **lowercase** (`"asr"`), though Google documents it
+    capitalised. `t.trackKind !== 'ASR'` therefore classified every
+    auto-generated track as author-written, silently inverting the manual-over-ASR
+    preference that `selectCaptionTrack()` exists to express. The value is now
+    normalized to upper case, so a consumer's `=== 'ASR'` branch works.
+  - YouTube's auto-captions **roll**: each cue repeats the previous cue's text
+    before adding new words, interleaved with 10 ms cues that restate the line.
+    Emitting them verbatim put the same sentence at two or three timestamps,
+    which corrupts the one question this feature answers — *what was said at the
+    moment viewers left*. Carry-over lines are dropped and a cue with nothing new
+    is skipped. A real 15-second Short goes from 12 duplicated cues to 7 clean
+    ones. Two related quirks fixed with it: a whitespace-only line inside a cue
+    no longer terminates it (that dropped the opening line of every ASR track),
+    and inline word timings are stripped before lines are compared.
+- Cue times are rounded to millisecond precision, so `3.2800000000000002` no
+  longer reaches the JSON a consumer reads.
+
+### Changed
+
+- `trackKind` is now always upper case (`ASR`, `STANDARD`, `FORCED`) regardless
+  of what the API returns.
+
 ## [0.7.0] - 2026-07-30
 
 ### Added

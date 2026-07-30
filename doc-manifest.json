@@ -498,6 +498,9 @@
         "YouTube API Gotchas",
         "CTR and impressions do not work on the Analytics API",
         "Captions have no read-only scope, and only work on videos you own",
+        "captions.download returns a Blob, and String() on it yields \"[object Blob]\"",
+        "trackKind comes back lowercase, so a === 'ASR' test never fires",
+        "Auto-captions roll, so a naive parse repeats every sentence",
         "An auto-generated caption track is a different claim from an author-written one",
         "Reporting API data is always 1-2 days behind",
         "The first reach run returns nothing for 24-48 hours",
@@ -522,7 +525,7 @@
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 277,
+      "line_count": 318,
       "links_to": [
         "docs/gotchas/auth.md",
         "docs/youtube-apis.md"
@@ -664,7 +667,7 @@
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 253,
+      "line_count": 257,
       "links_to": [
         "docs/gotchas/youtube-api.md"
       ],

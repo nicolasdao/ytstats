@@ -30,7 +30,11 @@ export async function listCaptionTracks(apis, videoId) {
   return (res.data.items ?? []).map(item => ({
     id: item.id,
     language: item.snippet?.language ?? null,
-    trackKind: item.snippet?.trackKind ?? null,
+    // Google documents ASR / standard / forced in capitals but returns them
+    // LOWERCASE ("asr"). Normalized here so consumers get one stable spelling —
+    // reading the raw value made the manual-vs-ASR preference below silently
+    // inert, since 'asr' !== 'ASR' classified every auto track as author-written.
+    trackKind: item.snippet?.trackKind ? String(item.snippet.trackKind).toUpperCase() : null,
     isAutoSynced: item.snippet?.isAutoSynced ?? null,
     isDraft: item.snippet?.isDraft ?? null,
     lastUpdated: item.snippet?.lastUpdated ?? null,
@@ -53,7 +57,10 @@ export function selectCaptionTrack(tracks, { language } = {}) {
   const usable = (tracks ?? []).filter(t => !t.isDraft);
   if (usable.length === 0) return null;
 
-  const manual = usable.filter(t => t.trackKind !== 'ASR');
+  // Case-insensitive: the API's real casing is lowercase, and a raw !== 'ASR'
+  // comparison would treat every auto-generated track as author-written.
+  const isAsr = t => String(t.trackKind ?? '').toUpperCase() === 'ASR';
+  const manual = usable.filter(t => !isAsr(t));
   const preferred = language
     ? [
         ...manual.filter(t => t.language === language),
@@ -74,9 +81,26 @@ export function selectCaptionTrack(tracks, { language } = {}) {
  */
 export async function downloadCaptionTrack(apis, trackId, { format = DOWNLOAD_FORMAT } = {}) {
   const res = await call(() => apis.youtube.captions.download({ id: trackId, tfmt: format }));
-  // googleapis hands back the body as data; it is text for tfmt=vtt/srt.
-  const body = typeof res.data === 'string' ? res.data : String(res.data ?? '');
+  const body = await readBody(res.data);
   return { format, body, cues: parseCues(body) };
+}
+
+/**
+ * Caption bodies do not arrive as a string.
+ *
+ * googleapis hands this endpoint back as a **Blob**, and `String(blob)` yields the
+ * literal "[object Blob]" — which parses to zero cues while every other signal
+ * still reads as success: ok true, a track chosen, a file cached. That is the same
+ * silently-empty shape as the reach-CSV regression, so the type is handled
+ * explicitly rather than coerced.
+ */
+async function readBody(data) {
+  if (typeof data === 'string') return data;
+  if (data == null) return '';
+  if (Buffer.isBuffer(data)) return data.toString('utf-8');
+  if (typeof data.text === 'function') return data.text();
+  if (typeof data.arrayBuffer === 'function') return Buffer.from(await data.arrayBuffer()).toString('utf-8');
+  return String(data);
 }
 
 /**

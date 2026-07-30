@@ -36,6 +36,47 @@ Two consequences worth keeping straight:
 
 **Where handled:** `CAPTIONS_SCOPE` and `captionsScopeMissing()` in `src/auth/oauth.js`; the fetchers in `src/api/captions.js`; the pre-flight check in the `transcript` command (`src/cli.js`). `SCOPES` stays at exactly three entries and a test asserts it.
 
+## captions.download returns a Blob, and String() on it yields "[object Blob]"
+
+The googleapis client hands this endpoint back as a **Blob**, not a string — unlike every other call in the codebase. `String(res.data)` therefore produces the literal `"[object Blob]"`, which parses to **zero cues**.
+
+The failure shape is the dangerous part, and it is the reach-CSV regression exactly: `ok: true`, a track selected and reported, a cache file written, a `DATA_EMPTY` warning saying the track "contained no cues". Indistinguishable from a video whose captions really are empty. It shipped in 0.7.0 and was caught only by running the command against a real video — every unit test passed, because the fixtures were hand-written strings.
+
+`readBody()` now handles string, `Buffer`, and anything exposing `.text()` or `.arrayBuffer()`, in that order.
+
+**Where handled:** `readBody()` in `src/api/captions.js`, pinned by a test whose fake returns `{ text: async () => … }` rather than a string.
+
+## trackKind comes back lowercase, so a === 'ASR' test never fires
+
+Google's [captions resource docs](https://developers.google.com/youtube/v3/docs/captions) give `trackKind` as `ASR`, `forced`, `standard` — capitalised. The API returns `"asr"`.
+
+So `t.trackKind !== 'ASR'` classified **every** auto-generated track as author-written, silently inverting the one preference `selectCaptionTrack()` exists to express: on a video with both an ASR and a manual track, it would have picked ASR. Nothing fails; you just get the worse transcript and a `trackKind` that no consumer's `=== 'ASR'` branch matches.
+
+`listCaptionTracks()` now uppercases the value so consumers get one stable spelling, and the internal comparison is case-insensitive regardless.
+
+**Where handled:** the `toUpperCase()` normalization in `listCaptionTracks()` and the `isAsr()` helper in `selectCaptionTrack()`, `src/api/captions.js`.
+
+## Auto-captions roll, so a naive parse repeats every sentence
+
+YouTube's ASR VTT is a *rolling* transcript: each cue repeats the previous cue's text and appends the new words, interleaved with 10-millisecond "settle" cues that restate the line on its own.
+
+```
+00:00:03.280 --> 00:00:07.190 align:start position:0%
+Here are three warning signs that AI            <- carry-over from the previous cue
+might<00:00:03.679><c> be</c><00:00:03.919><c> burning</c>...   <- the new words
+```
+
+Emitting every cue verbatim gives the same sentence at two or three different timestamps. For this feature that is worse than verbose: the whole point is answering *what was said at the moment viewers left*, so duplicated text at the wrong timestamps corrupts the answer rather than padding it.
+
+Two further quirks in the same payload, both of which silently lost content:
+
+- A **whitespace-only line** appears *inside* a cue. Trimming before the blank-line check treated it as a cue terminator and dropped the opening line of every ASR track.
+- Word timings are **inline markup** (`Here<00:00:00.400><c> are</c>`), so markup stripping has to run before any line comparison.
+
+`parseCues()` drops the leading lines a cue carries over from its predecessor and skips a cue left with nothing new. A real 15-second Short goes from 12 duplicated cues to 7 clean ones.
+
+**Where handled:** `parseCues()` in `src/api/transforms.js`, pinned by `REAL_ASR_VTT` in `test/api/captions.test.js` — a verbatim capture of live output. Do not replace that fixture with a tidier hand-written one; its awkwardness is the test.
+
 ## An auto-generated caption track is a different claim from an author-written one
 
 `captions.list` returns both kinds, distinguished by `trackKind` — `ASR` is speech recognition, anything else was written or uploaded by the author. ASR mishears names, jargon and anything said over music.
