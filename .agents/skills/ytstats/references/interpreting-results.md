@@ -36,6 +36,45 @@ If you see that, check `ytstats --version` and say the CLI needs upgrading. Do *
 
 A `ratio` of `1.54` at some position means viewers **rewatched that moment** — a loop, common on Shorts. Never clamp it, never call it a bug, never describe it as "over 100% which must be an error." It is the most interesting signal in the curve.
 
+## "How far back does my data go" is answered by the archive, not the channel
+
+For anything from `reach` or the Reporting API, the honest answer comes from `ytstats archive` → `reportTypes[].firstDate`, never from when the channel was created or when jobs were enabled.
+
+Reports expire 60 days after YouTube generates them, so data that was never downloaded inside that window does not exist anywhere anymore. A channel running for years can have an archive starting two months ago, and that is not a bug — it is the expiry window.
+
+Say this plainly rather than implying the earlier history is retrievable. It is not, by any API call.
+
+## A retention dip has two opposite explanations
+
+`ratio` tells you **where** viewers thinned out. It cannot tell you **why**, and the two causes need opposite advice:
+
+| Signal | Meaning | What to advise |
+|---|---|---|
+| High `stoppedWatching` in the segment | Viewers **left** here | The content lost them — cut, tighten, or reorder |
+| High `startedWatching` just after a low-`ratio` stretch | Viewers **skipped** that stretch | They found it skippable — move the payload earlier |
+
+Reporting a dip without checking which one moved is guessing. Say which it was.
+
+`relativeRetentionPerformance` compares the curve to **similar YouTube videos**, so it answers "is this normal for a video like mine" rather than "where is my worst moment". A curve that looks poor in isolation can be above average for its length and category — and that changes the recommendation entirely.
+
+`totalSegmentImpressions` is the denominator when someone wants counts rather than ratios.
+
+Any of these four can be `null`, which means **the channel cannot serve that metric** — never that it is zero. A dropped metric comes with an `ANALYTICS_METRICS_UNSUPPORTED` warning naming it. Requires ytstats 0.6.0+; older versions return only `position` and `ratio`.
+
+## `views` changed meaning on 30 April 2025
+
+YouTube redefined the metric rather than adding a new one: a **Shorts** view is now every play or replay, with no minimum watch time. Long-form was unaffected. `engagedViews` carries the previous definition.
+
+This matters whenever a question spans that date:
+
+- **"Are my Shorts doing better than last year?"** — on `views` alone the answer is yes for mechanical reasons. Compare `engagedViews` instead.
+- **"Shorts vs long-form"** — `views` overstates Shorts after April 2025 because only one side changed counting method.
+- **A step change in the daily series around 2025-04-30** is the redefinition, not something the user did.
+
+Both fields are present on `daily`, `video-analytics`, `traffic`, `devices`, `content-types`, `geography`, and `playback-locations` (0.6.0+). Use `views` for "what YouTube reports today", `engagedViews` for anything comparative across that boundary — and say which you used.
+
+If `engagedViews` is `null`, this channel cannot serve it; do not substitute `views` silently.
+
 ## Shorts detection is duration-based and disagrees with YouTube
 
 `ytstats videos` classifies by duration: `≤60s` is `SHORTS`. A 62-second video intended as a Short reads as `VIDEO_ON_DEMAND`.

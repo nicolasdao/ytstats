@@ -42,6 +42,10 @@ Never parse the prose. `code` is the public contract; the wording is not.
 | `daily`, `traffic`, `demographics`, `devices`, `content-types`, `search-terms`, `geography`, `playback-locations`, `video-analytics` | `{period, rows}` | `.data.rows` |
 | `videos` | a bare array | `.data` |
 | `channel` | the channel object | `.data.subscriberCount` |
+| `retention` | `{videoId, period, curve}` | `.data.curve` |
+| `reports` | `{available, active, missing, jobs, coverage}` | `.data.missing` |
+| `sync` | `{jobs, downloaded, skipped, rows, byType, failed, dataDir}` | `.data.downloaded` |
+| `archive` | `{dataDir, reportTypes, totalRows, ingestedReports}` | `.data.reportTypes` |
 | `fetch` | `{period, warnings, notes, data}` | `.data.data.<dataset>` |
 
 `fetch` nests one level deeper than the rest, and its datasets are **bare arrays** — `.data.data.daily` is the row list, with no `.rows` under it. Its per-step failures are at `.data.warnings`, and are also copied to the envelope's top-level `.warnings`.
@@ -82,6 +86,10 @@ The config directory is handled by the CLI itself — `%APPDATA%\ytstats\` on Wi
 | "best performing videos this period" | `video-analytics` |
 | "where do viewers drop off", "retention" | `retention <videoId>` |
 | "CTR", "thumbnail performance", "impressions" | `reach` — read the async caveat first |
+| "am I collecting everything", "what data am I missing" | `reports` |
+| "start collecting everything", "fix the missing reports" | `reports-enable --all` |
+| "back up my data", "save my reports", "sync" | `sync` |
+| "what do I have stored", "how far back does my data go" | `archive` |
 | something no command covers | `query -m <metrics> --dimensions <dims>` |
 | "am I logged in", "which channel", "who am I" | `status` |
 | "something is broken", "why doesn't this work" | `doctor` |
@@ -136,7 +144,7 @@ Read `.errors[0].code` and act on it. The catalog, with what each code means and
 
 The two flags that prevent pointless loops: `recoverable: false` means stop and tell the user, `retryable: false` means change something before trying again. `nextSteps[0]` is a runnable command.
 
-If the failure is unclear, run `doctor` — it checks four prerequisites independently and always exits 0, with the verdict in `data.healthy`.
+If the failure is unclear, run `doctor` — it checks nine prerequisites independently and always exits 0, with the verdict in `data.healthy`.
 
 ## Reading results correctly
 
@@ -148,9 +156,60 @@ The three that bite hardest:
 - **Retention ratios above 1.0 are correct** — viewers looped that moment. Never clamp, never call it a bug.
 - **Empty is not failed.** `rows: []` with `ok: true` and a `DATA_EMPTY` warning means the channel genuinely had no activity. In a `fetch`, an empty dataset named in `data.warnings[]` means that step failed, which is different again.
 
+## Data YouTube is not collecting — raise this unprompted
+
+**This is the one problem in `ytstats` that gets worse the longer nobody mentions it, and the user cannot discover it themselves.** Every command keeps returning `ok: true` the entire time it is happening.
+
+The YouTube Reporting API generates a report **only once a job exists for it**. A report type with no job produces nothing — not withheld, never generated. Creating the job later recovers **30 days and no more**. So an uncovered report type is losing history permanently, today, silently.
+
+### When to check
+
+Run `reports` — it is one cheap call — whenever any of these is true:
+
+- You are setting up a new user, **at the end**, after `login` succeeds.
+- `doctor` returns `reporting_jobs` with `status: "fail"`.
+- They ask anything about CTR, impressions, or `reach`.
+- They ask for historical data and you find less than expected.
+
+```bash
+ytstats reports 2>/dev/null | jq '{coverage, missing: [.data.missing[].id]}'
+```
+
+### What to say
+
+Do not bury this in a list of minor warnings, and do not describe it as "a warning". State the loss, the deadline, and the fix, in that order:
+
+> **Your channel is not collecting 16 of its 17 available report types.** YouTube only generates these once you create a reporting job, so that data is not being recorded at all right now — and when you do turn it on, it can only recover the last 30 days. Everything older is gone for good.
+>
+> This takes one command to fix:
+>
+> ```
+> ytstats reports-enable --all
+> ```
+>
+> Then: the first reports arrive in **24–48 hours** (with a 30-day backfill), so re-run your query after that. Nothing else is needed.
+
+Name the actual count and the actual report ids from `.data.missing` — never the example numbers above.
+
+### The follow-up that is easy to miss
+
+Creating jobs starts collection. It does **not** preserve anything. Reports expire off Google's servers **60 days after generation** (30 days for the backfill ones), so a job nobody downloads from still loses history.
+
+`ytstats sync` is the fix — it downloads everything outstanding into a local append-only archive. It is idempotent, so running it repeatedly is safe and cheap.
+
+Whenever you run `reports-enable`, close with this:
+
+> These reports expire 60 days after YouTube generates them, so creating the jobs starts collection but doesn't preserve anything. Run `ytstats sync` to pull them into a local archive, and put it on a schedule — monthly is comfortable, weekly is safer. That archive becomes the only copy of anything older than 60 days, so keep it somewhere you back up.
+
+Also run `sync` yourself, unprompted, whenever `doctor` returns `reports_archived` with `status: "fail"` — that means something is within 14 days of being deleted. Say what you are doing and why; do not silently fix it.
+
+Use `archive` to answer "how far back does my data go" — `firstDate` per report type is the real answer, and it is usually more recent than the user expects because of the expiry window.
+
 ## Constraints
 
 - **NEVER** run `logout` without an explicit confirmation.
+- **NEVER** stay silent about a failing `reporting_jobs` check because the run otherwise succeeded — it is a permanent, ongoing data loss, not a nitpick.
+- **NEVER** describe `views` as comparable across 30 April 2025 without checking `engagedViews` — YouTube redefined the metric on that date.
 - **NEVER** report `impressionsCtr` without converting the fraction to a percentage.
 - **NEVER** retry a command whose diagnostic says `retryable: false`, or continue at all when `recoverable: false`.
 - **NEVER** fall back to another channel when `--account` fails with `AUTH_ACCOUNT_UNKNOWN` — show the user the channels in `context.allowed`.
@@ -164,7 +223,7 @@ The three that bite hardest:
 
 The CLI ships **no** Google client id by design — each user brings their own Google Cloud OAuth client, so the quota is theirs, no verification is needed, and no data leaves the machine. The cost is a one-time setup, and guiding someone through it is your job.
 
-**Start with `doctor`, never with the full walkthrough.** It runs seven checks covering the whole setup and tells you exactly which steps are outstanding, so you present the three things they still need rather than reciting seven at someone who has done four.
+**Start with `doctor`, never with the full walkthrough.** It runs nine checks covering the whole setup and tells you exactly which steps are outstanding, so you present the three things they still need rather than reciting nine at someone who has done six.
 
 ```bash
 ytstats doctor 2>/dev/null | jq '.data.checks'
@@ -184,6 +243,8 @@ Walk `data.checks` in order and stop at the first `status: "fail"` — the check
 | `api_reachable` | Data API v3 not enabled, or the token is bad. The diagnostic distinguishes them |
 | `api_analytics` | Analytics API v2 not enabled — everything with a date window will fail until it is |
 | `api_reporting` | Reporting API v1 not enabled — `reach` and CTR will fail until it is |
+| `reporting_jobs` | The API is on but report types have no job, so YouTube is generating nothing for them. See below — raise this even when everything else passes |
+| `reports_archived` | Reports exist but were never downloaded and expire within 14 days. Run `ytstats sync` now |
 
 Each `API_NOT_ENABLED` diagnostic carries the exact console URL for **that** API in `remediation.docs`. Give them that link, not a general one.
 

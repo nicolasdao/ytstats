@@ -81,7 +81,29 @@ export YTSTATS_CONFIG_DIR=$PWD/.ytstats
 
 ## Warnings — never fatal
 
-`AUTH_CLIENT_ID_SUSPICIOUS`, `DATA_PARTIAL`, `DATA_EMPTY`, `REACH_PENDING` are warnings. They never make `ok` false and never change the exit code. Report them as context, not as failure.
+`AUTH_CLIENT_ID_SUSPICIOUS`, `DATA_PARTIAL`, `DATA_EMPTY`, `REACH_PENDING`, `REPORTING_JOBS_MISSING`, `REPORTS_EXPIRING`, `ANALYTICS_METRICS_UNSUPPORTED` are warnings. They never make `ok` false and never change the exit code. Report them as context, not as failure.
+
+### REPORTING_JOBS_MISSING is the exception to "warnings are minor"
+
+Severity `warning` here reflects that the *command* succeeded, not that the situation is small. It means report types have no reporting job, so YouTube is generating **no data at all** for them, and creating a job later recovers only the trailing 30 days.
+
+`recoverable: true`, `retryable: false` — re-running the command changes nothing; the jobs must be created.
+
+Raise it explicitly every time, even inside an otherwise clean run. Give the count, the report ids from `context`, `ytstats reports-enable --all` as the fix, and the 24–48 hour wait before data appears. Then mention that reports expire 60 days after generation, so the user needs a recurring pull to actually accumulate history. Full wording is in SKILL.md under "Data YouTube is not collecting".
+
+### REPORTS_EXPIRING is a deadline, not a status
+
+Reports YouTube has generated but nobody downloaded expire in 60 days (30 for backfill). This warning means some are within 14 days of that. After it, those periods have no record anywhere.
+
+`recoverable: true`, `retryable: false` — the fix is `ytstats sync`, not re-running whatever produced the warning.
+
+**Run `sync` yourself when you see this**, and say you are doing it. It is a read plus a local write, it is idempotent, and waiting for the user to come back could cost the data. Then confirm with `archive` and tell them to schedule `sync` and back the directory up.
+
+### ANALYTICS_METRICS_UNSUPPORTED means fields are absent, not zero
+
+The query succeeded with a reduced metric set because this channel cannot serve one of the newer metrics — most often `relativeRetentionPerformance`, sometimes `engagedViews`. `context.dropped` names them.
+
+The rows are correct; they carry fewer fields. **Report the dropped fields as unknown.** Saying "your relative retention is 0" when the metric was never returned is a confidently false answer, and it is the failure this diagnostic exists to prevent. Nothing needs fixing.
 
 ## When you do not know what is wrong
 
@@ -89,7 +111,9 @@ export YTSTATS_CONFIG_DIR=$PWD/.ytstats
 ytstats doctor
 ```
 
-Four independent checks — config writable, credentials present, signed in, API reachable — reported together rather than stopping at the first failure. It **always exits 0**; the verdict is `data.healthy` and the blocking diagnostics are in `data.blocking`. Treating a non-zero exit as the signal here is a mistake; there isn't one.
+Nine independent checks — config writable, credentials present, signed in, then one probe per API (Data v3, Analytics v2, Reporting v1), then reporting jobs scheduled, reports archived, and finally the consent screen — reported together rather than stopping at the first failure. It **always exits 0**; the verdict is `data.healthy` and the blocking diagnostics are in `data.blocking`. Treating a non-zero exit as the signal here is a mistake; there isn't one.
+
+The last two are the ones a clean-looking run still hides: `reporting_jobs` means YouTube is generating no data for some report types, and `reports_archived` means generated data is about to be deleted undownloaded. Neither blocks a command from succeeding.
 
 Use it whenever the failure is unclear, or before a long unattended run.
 

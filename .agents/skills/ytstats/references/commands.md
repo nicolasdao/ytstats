@@ -54,7 +54,7 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 | Command | Purpose |
 |---|---|
 | `status` | Who is signed in, where config lives, which client resolved. No auth needed |
-| `doctor` | Seven independent readiness checks covering the whole setup. Always exits 0 — the verdict is `data.healthy` |
+| `doctor` | Nine independent readiness checks covering the whole setup. Always exits 0 — the verdict is `data.healthy` |
 | `login [-c <path>] [--no-browser] [--timeout <s>]` | Loopback OAuth. `--no-browser` prints a URL and reads the pasted redirect |
 | `logout [--all] [--forget-credentials]` | Revoke with Google, delete locally. **Confirm before running** |
 | `use <channelId or @handle>` | Set the default channel. Fails if not signed in |
@@ -62,7 +62,9 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 
 `status` returns `{ authenticated, configDir, credentialSource, clientId, project, accounts[], setupGuide? }`. `project` is `{ id, number, consoleUrl }` — which Google Cloud project the credentials belong to, with a console URL already pinned via `?project=`. Prefer it over composing console links yourself. Each account carries `channelId`, `channelTitle`, `customUrl`, `clientId`, `authorizedAt`, `savedAt`, `isDefault` — never token material. `authorizedAt` is when that account's refresh token was issued; `savedAt` is merely the last write and moves on every token refresh.
 
-`doctor` checks, in dependency order: `config_writable`, `credentials`, `signed_in`, then one probe per API — `api_reachable` (Data v3), `api_analytics` (Analytics v2), `api_reporting` (Reporting v1) — and finally `consent_screen`. The three API probes are skipped when earlier checks failed.
+`doctor` checks, in dependency order: `config_writable`, `credentials`, `signed_in`, then one probe per API — `api_reachable` (Data v3), `api_analytics` (Analytics v2), `api_reporting` (Reporting v1) — then `reporting_jobs`, `reports_archived`, and finally `consent_screen`. The API probes are skipped when earlier checks failed.
+
+`reporting_jobs` (0.6.0+) is unlike the rest: every other check reports something **blocked**, this one reports something **already lost**. It fails when report types have no reporting job, which means YouTube is generating no data for them and only the last 30 days is ever recoverable. Never let it pass unmentioned because the rest of the run succeeded.
 
 Each check carries `status` (`pass` / `fail` / `unknown`) alongside boolean `ok`. The three APIs are enabled independently in Google Cloud, so a pass on one says nothing about the others.
 
@@ -121,7 +123,20 @@ ytstats videos [-n <n>] [-s <field>] [--order asc|desc] [-t <type>]
 ytstats retention <videoId> [date flags]
 ```
 
-Returns `{ videoId, period, curve }` with roughly 100 points of `{ position, ratio }`.
+Returns `{ videoId, period, curve }` with roughly 100 points:
+
+| Field | Meaning |
+|---|---|
+| `position` | Elapsed fraction of the video, `0`–`1` |
+| `ratio` | `audienceWatchRatio` — how many viewers remain here. Above `1.0` means looping, never clamp |
+| `stoppedWatching` | How often viewers **left** during this segment — the literal drop-off |
+| `startedWatching` | How often viewers **joined** here, i.e. skipped ahead to it |
+| `totalSegmentImpressions` | The denominator, for turning ratios back into counts |
+| `relativeRetentionPerformance` | This curve versus similar YouTube videos, not versus itself |
+
+**Use the last four to say *why*, not just *where*.** A trough with high `stoppedWatching` is content losing people — cut or tighten it. The same trough with high `startedWatching` just before it is viewers skipping an intro — move the payload earlier. `ratio` alone cannot tell those apart, and they call for opposite edits.
+
+Any of the four may be `null`, meaning **this channel cannot serve that metric** — never that the value is zero. `relativeRetentionPerformance` needs a peer set and is the one most often missing. When something was dropped the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly which. Requires ytstats 0.6.0+; earlier versions return only `position` and `ratio`.
 
 ### reach and reach-jobs
 
@@ -131,6 +146,52 @@ ytstats reach-jobs
 ```
 
 The only source of thumbnail impressions and CTR. Returns `{ job, reportCount, pending, rows[] }`, plus `message` when pending. Rows carry `date`, `channelId`, `videoId`, `impressions`, `impressionsCtr`. Re-running is harmless and creates no duplicate job.
+
+### reports and reports-enable
+
+```bash
+ytstats reports
+ytstats reports-enable --all
+ytstats reports-enable --type channel_combined_a3 --type channel_end_screens_a2
+```
+
+**The Reporting API generates a report only once a job exists for it.** A report type with no job produces nothing at all, and creating a job later backfills only 30 days — so uncovered types are losing history permanently while every command still reports success.
+
+`reports` returns `{ available, active, missing, jobs, coverage }`:
+
+| Field | Meaning |
+|---|---|
+| `available` | Report types this channel may schedule, discovered live |
+| `active` | Those with a job — collecting now |
+| `missing` | Those with no job — **collecting nothing** |
+| `coverage` | `active / available` as a fraction |
+
+A non-empty `missing` raises `REPORTING_JOBS_MISSING`.
+
+`reports-enable` returns `{ created, skipped, failed, requested, note }` and needs `--all` or at least one `--type` — omitting both is `INPUT_MISSING_REQUIRED`, raised before authentication. A type this channel cannot schedule lands in `failed` without stopping the others.
+
+After enabling: first reports arrive in **24–48 hours** with a 30-day backfill, so an immediate re-run returning nothing is expected. Reports then **expire 60 days after generation** (30 for backfill), so tell the user to pull on a schedule and keep the files — creating jobs starts collection but preserves nothing.
+
+Requires ytstats 0.6.0+.
+
+### sync and archive
+
+```bash
+ytstats sync
+ytstats archive
+```
+
+**Jobs make YouTube generate reports; `sync` is what stops them disappearing.** Reports expire 60 days after generation (30 for backfill), so job coverage plus an infrequent pull still loses history silently.
+
+`sync` downloads everything not yet archived into a local append-only store. Idempotent by report id — safe to run on a schedule, and an already-archived report costs no download. Returns `{ jobs, downloaded, skipped, rows, byType, failed, dataDir, note }`. A failed download is **not** marked ingested, so the next run retries it.
+
+`archive` needs no auth and returns `{ dataDir, reportTypes[], totalRows, ingestedReports }` with `rows`, `firstDate`, `lastDate`, `bytes` per type.
+
+**Use `archive.reportTypes[].firstDate` to answer "how far back does my data go".** It is usually more recent than the user expects, because anything older than the expiry window was deleted by Google before it was ever downloaded. Do not answer that question from the channel's creation date.
+
+Storage is NDJSON under `<config dir>/data/reports/` or `YTSTATS_DATA_DIR`. Tell users to back that directory up — it is the only copy of anything older than 60 days.
+
+Requires ytstats 0.6.0+.
 
 ### query
 

@@ -1,7 +1,7 @@
 {
 	"name": "ytstats",
-	"version": "0.6.0",
-	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 22 commands, the JSON envelope, and interpretation traps.",
+	"version": "0.7.0",
+	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 26 commands, the JSON envelope, and interpretation traps.",
 	"type": "skill",
 	"authors": ["Nicolas Dao <nicolas.dao@gmail.com>"],
 	"license": "BSD-3-Clause",
@@ -9,8 +9,8 @@
 	"dependencies": {},
 	"systemDependencies": {
 		"ytstats": {
-			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.5.0 or newer is required — before it, the --account selector was silently ignored and every command answered with the default channel.",
-			"version": ">=0.5.0",
+			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.6.0 or newer is required — it adds the reports/reports-enable/sync/archive commands and the doctor reporting_jobs and reports_archived checks that this skill instructs agents to raise unprompted, plus the retention drop-off metrics and engagedViews. On 0.5.0 those commands do not exist, so the skill's guidance would name fixes the user cannot run.",
+			"version": ">=0.6.0",
 			"check": "npx --yes ytstats --version",
 			"install": {
 				"darwin": "npm install -g ytstats",

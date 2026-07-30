@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0] - 2026-07-29
+
+### Added
+- Instruct agents to raise missing Reporting API jobs **unprompted**, with the exact wording to use. This is the one condition the user cannot discover themselves: YouTube generates a report only once a job exists for it, so uncovered report types produce nothing at all while every command keeps returning `ok: true`, and creating the job later recovers only 30 days. An agent that stayed quiet because the run "succeeded" would be watching history disappear.
+- Follow-up guidance that creating jobs is only half the fix — reports expire 60 days after generation (30 for backfill), so a job nobody downloads from still loses data. Agents now close `reports-enable` by telling the user to pull on a recurring schedule and keep the files.
+- `reports`, `reports-enable`, `sync` and `archive` in the routing table, the command reference, and the `.data` shapes table.
+- Guidance that creating jobs and archiving reports are **two** failures with one symptom. Reports expire 60 days after generation, so agents are told to run `sync` themselves — announcing it — when `doctor` reports `reports_archived` as failing, rather than waiting for a user who may not return before the deadline.
+- Answer "how far back does my data go" from `archive.reportTypes[].firstDate`, never from the channel's age. A years-old channel can have a two-month archive, and the earlier history is not retrievable by any API call.
+- The `reports_archived` doctor check and the `REPORTS_EXPIRING` diagnostic.
+- The `reporting_jobs` doctor check, flagged as the only check that reports something already lost rather than something blocked.
+- How to read the four new retention metrics. A dip with high `stoppedWatching` is content losing viewers; the same dip with high `startedWatching` is viewers skipping ahead — opposite advice, and `ratio` alone cannot distinguish them. `relativeRetentionPerformance` answers "is this normal for a video like mine" rather than "where is my worst moment".
+- The 30 April 2025 `views` redefinition and when to use `engagedViews` instead. Comparisons spanning that date otherwise overstate Shorts for purely mechanical reasons, and a step change in the daily series around it is the metric change rather than anything the user did.
+- `REPORTING_JOBS_MISSING` and `ANALYTICS_METRICS_UNSUPPORTED` to the diagnostic catalog, both with the caveat that a dropped metric means **unknown**, never zero.
+
+### Changed
+- Require `ytstats` 0.6.0 or newer. The skill now tells agents to run `reports-enable --all` as the fix for a real and ongoing data loss; on 0.5.0 that command does not exist, so the guidance would name a remedy the user cannot run.
+- `doctor` is described as nine checks, not seven — and the "four independent checks" figure in the troubleshooting reference, which had been wrong since the check count grew past four, is corrected and now names each one.
+
 ## [0.6.0] - 2026-07-29
 
 ### Changed
