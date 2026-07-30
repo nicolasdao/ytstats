@@ -41,6 +41,10 @@ export function buildProgram(deps = {}) {
     exit = code => { process.exitCode = code; },
     session = { getAuthenticatedClient, login, logout, identifyLegacyTokens },
     now = () => new Date(),
+    // Injected for the same reason every other effect is: without it no test can
+    // drive an authenticated command, so the whole post-auth half of the CLI —
+    // including which warnings a command emits — was unreachable from the suite.
+    makeApis = createApis,
   } = deps;
 
   const program = new Command();
@@ -124,7 +128,7 @@ export function buildProgram(deps = {}) {
     const { client, account } = session.getAuthenticatedClient({
       account: accountFrom(cmdOpts, globalOpts),
     });
-    return { apis: createApis(client), account };
+    return { apis: makeApis(client), account };
   }
 
   const rangeFrom = (cmdOpts) =>
@@ -587,13 +591,29 @@ export function buildProgram(deps = {}) {
         const { apis } = withApis(globalOpts, cmdOpts);
         const range = rangeFrom(cmdOpts);
         reporter.progress(`Querying ${range.startDate} to ${range.endDate}...`);
-        const rows = await fn(apis, range, cmdOpts);
+
+        // Collected here rather than per-command so every dataset reports a
+        // dropped metric. Without this the tiered fallback is invisible on these
+        // commands: rows arrive with a null column and nothing says why — the
+        // same shape as the reach-CSV regression, which stayed hidden for two
+        // months precisely because ok stayed true and no warning fired.
+        const dropped = [];
+        const rows = await fn(apis, { ...range, onDegraded: m => dropped.push(...m) }, cmdOpts);
+
         // Empty is ambiguous — say explicitly that the query worked and found nothing.
         if (Array.isArray(rows) && rows.length === 0) {
           reporter.warn(diagnose(DIAGNOSTICS.DATA_EMPTY, {
             step: name, detail: `No rows for ${range.startDate}..${range.endDate}`,
           }));
         }
+        if (dropped.length) {
+          reporter.warn(diagnose(DIAGNOSTICS.ANALYTICS_METRICS_UNSUPPORTED, {
+            step: name,
+            detail: `Unavailable for this channel: ${dropped.join(', ')}`,
+            dropped: dropped.join(', '),
+          }));
+        }
+        // `period` is the clean range — never the object carrying onDegraded.
         return { period: range, rows };
       },
       { validate: cmdOpts => validateRange(cmdOpts) },
