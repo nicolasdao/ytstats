@@ -44,6 +44,12 @@ Reports expire 60 days after YouTube generates them, so data that was never down
 
 Say this plainly rather than implying the earlier history is retrievable. It is not, by any API call.
 
+**Check how many channels share the config directory before quoting those numbers.** The archive is one file per report type, **not** per channel, so if the user has synced more than one channel from the same `YTSTATS_CONFIG_DIR`, `archive` totals and `firstDate` / `lastDate` span all of them. `archive` takes no `--account` — it reads local files — so you cannot scope it from the command.
+
+Run `status` first. If `.data.accounts` has more than one entry, either say the figures cover every synced channel, or filter by `channel_id` yourself rather than quoting `archive` directly. With a single account the numbers are unambiguous.
+
+Nothing is corrupted by this — rows carry `channel_id` and never overwrite each other, and `sync` honours `--account` correctly. Only the *store* is shared, which is what makes it easy to miss: every individual command behaves properly.
+
 ## A retention dip has two opposite explanations
 
 `ratio` tells you **where** viewers thinned out. It cannot tell you **why**, and the two causes need opposite advice:

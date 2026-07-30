@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.2] - 2026-07-30
+
+### Fixed
+- Warn that the report archive is keyed by report type, **not** by channel. 0.7.1 told agents to answer "how far back does my data go" from `archive.reportTypes[].firstDate` without noting that several channels synced from one config directory share those files — and `archive` accepts no `--account`, since it reads local files. On a multi-channel setup an agent would have quoted combined figures as if they described the one channel asked about. Agents are now told to check the account count via `status` first. Nothing is lost either way: rows carry `channel_id` and never overwrite each other, and `sync` honours `--account` — only the totals combine, which is what makes it easy to miss.
+
+### Changed
+- CLI floor unchanged at `>=0.6.1`. This limitation is identical on every version that has an archive, so it is a documentation gap in the skill rather than a behaviour difference between CLI releases.
+
 ## [0.7.1] - 2026-07-30
 
 ### Changed

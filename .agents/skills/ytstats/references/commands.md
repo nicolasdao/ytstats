@@ -191,6 +191,8 @@ ytstats archive
 
 **Use `archive.reportTypes[].firstDate` to answer "how far back does my data go".** It is usually more recent than the user expects, because anything older than the expiry window was deleted by Google before it was ever downloaded. Do not answer that question from the channel's creation date.
 
+**But the archive is keyed by report type, not by channel.** Several channels synced from one config directory share the same files, so `archive` totals cover all of them and it accepts no `--account`. Check `status` for the account count before quoting those figures. Rows stay distinguishable by `channel_id`, so nothing is lost — only the totals are combined.
+
 Storage is NDJSON under `<config dir>/data/reports/` or `YTSTATS_DATA_DIR`. Tell users to back that directory up — it is the only copy of anything older than 60 days.
 
 Requires ytstats 0.6.0+.
