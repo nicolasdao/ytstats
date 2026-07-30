@@ -75,7 +75,7 @@ All three must be enabled in the **same project** that issues your OAuth client.
 
 <https://console.cloud.google.com/auth/audience> — choose **External**, fill in the app name and your email, and add your own Google account as a **test user**.
 
-Google split this into three pages under *Google Auth Platform*: **Branding**, **Audience** (the link above), and **Data Access** (`/auth/scopes`, where scopes live). You do not need to add scopes by hand — `ytstats` requests its three read-only scopes at login.
+Google split this into three pages under *Google Auth Platform*: **Branding**, **Audience** (the link above), and **Data Access** (`/auth/scopes`, where scopes live). You do not need to add scopes by hand — `ytstats` requests its three read-only scopes at login, and the one opt-in captions scope only if you ask for it with `login --with-captions`.
 
 > **Publish it to Production when you're done.** While the consent screen is in *Testing*, Google expires refresh tokens after **7 days** and you'll be logging in every week. Publishing (you'll click past an "unverified app" warning once) stops that.
 

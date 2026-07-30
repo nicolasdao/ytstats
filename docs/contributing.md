@@ -34,6 +34,8 @@ Use `withApis(globalOpts)` to authenticate and get the API bundle. Never write t
 
 Commander's negated options read inverted: `--no-retention` surfaces as `cmdOpts.retention`, defaulting to `true`.
 
+**A command needing a scope outside the default three must check for it first.** `withApis()` returns the stored `account`, so pre-flight with `captionsScopeMissing(account)` (or an equivalent for a future scope) and fail with `AUTH_SCOPE_MISSING` rather than letting Google answer with an opaque 403. Check only when the account's `scopes` array is **present and lacks** the scope — a `null` means the grant was never recorded, and refusing on that would reject every account created before the field existed. `transcript` in `src/cli.js` is the worked example.
+
 ## Adding a diagnostic
 
 Entries in `DIAGNOSTICS` (`src/diagnostics.js`) are built with the `def()` helper, which defaults `severity` to `error` and `exitCode` to `EXIT.GENERAL`. A complete entry needs:

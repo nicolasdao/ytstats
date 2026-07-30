@@ -124,7 +124,9 @@ The reporter applies `redact()` to every stderr write for the same reason.
 
 An empty `rows` array is ambiguous — it could mean the query failed silently or that the channel genuinely had no activity. Every `simple()` command emits a `DATA_EMPTY` warning when the query succeeds with zero rows, so the caller can tell the two apart.
 
-**Where handled:** the `rows.length === 0` branch in `simple()`, `src/cli.js`.
+Commands built by hand follow the same convention rather than inventing their own: `transcript` emits `DATA_EMPTY` for a video with no usable caption track, because "captions are switched off" and "the request failed" must not look alike either.
+
+**Where handled:** the `rows.length === 0` branch in `simple()`, and the no-track branch of the `transcript` action, `src/cli.js`.
 
 ## --no-retention is Commander's negation, so the option reads as `retention`
 
