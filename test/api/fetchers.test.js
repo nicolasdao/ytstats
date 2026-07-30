@@ -327,6 +327,193 @@ describe('Analytics API — metric degradation', () => {
   });
 });
 
+describe('Analytics API — segmentation', () => {
+  const NOT_SUPPORTED = { response: { status: 400, data: { error: { message: 'The query is not supported.' } } } };
+
+  /**
+   * CAPTURED VERBATIM from the live Analytics API on 2026-07-30, for
+   * `dimensions=day,subscribedStatus` narrowed to the metrics that segment
+   * accepts. Do not tidy it or invent extra rows — the point of this fixture is
+   * that it is what YouTube actually returned, including the second row where
+   * the same day appears again for the other segment value.
+   */
+  const REAL_DAILY_SUBSCRIBED = {
+    data: {
+      kind: 'youtubeAnalytics#resultTable',
+      columnHeaders: [
+        { name: 'day', columnType: 'DIMENSION', dataType: 'STRING' },
+        { name: 'subscribedStatus', columnType: 'DIMENSION', dataType: 'STRING' },
+        { name: 'views', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'engagedViews', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'estimatedMinutesWatched', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'averageViewDuration', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'likes', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'dislikes', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'shares', columnType: 'METRIC', dataType: 'INTEGER' },
+      ],
+      rows: [
+        ['2026-07-23', 'UNSUBSCRIBED', 27, 27, 57, 128, 2, 0, 0],
+        ['2026-07-23', 'SUBSCRIBED', 2, 2, 5, 175, 1, 0, 0],
+        ['2026-07-24', 'UNSUBSCRIBED', 41, 40, 66, 100, 0, 0, 0],
+      ],
+    },
+  };
+
+  /** CAPTURED VERBATIM, `dimensions=deviceType,youtubeProduct`, same session. */
+  const REAL_DEVICES_PRODUCT = {
+    data: {
+      kind: 'youtubeAnalytics#resultTable',
+      columnHeaders: [
+        { name: 'deviceType', columnType: 'DIMENSION', dataType: 'STRING' },
+        { name: 'youtubeProduct', columnType: 'DIMENSION', dataType: 'STRING' },
+        { name: 'views', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'engagedViews', columnType: 'METRIC', dataType: 'INTEGER' },
+        { name: 'estimatedMinutesWatched', columnType: 'METRIC', dataType: 'INTEGER' },
+      ],
+      rows: [
+        ['DESKTOP', 'CORE', 92, 84, 115],
+        ['MOBILE', 'CORE', 50, 39, 45],
+        ['TV', 'CORE', 5, 5, 15],
+      ],
+    },
+  };
+
+  it('appends the segment dimension and returns it as a column with real values', async () => {
+    const { analytics, calls } = analyticsApi(() => REAL_DAILY_SUBSCRIBED);
+    const rows = await fetchDailyAnalytics(
+      { analytics },
+      { startDate: 'a', endDate: 'b', segment: 'subscribedStatus' },
+    );
+
+    expect(calls[0].dimensions).toBe('day,subscribedStatus');
+    // A value, not a shape: a row whose subscribedStatus were undefined would
+    // still have the key and still have the right length.
+    expect(rows[0]).toMatchObject({ date: '2026-07-23', subscribedStatus: 'UNSUBSCRIBED', views: 27, likes: 2 });
+    expect(rows[1]).toMatchObject({ date: '2026-07-23', subscribedStatus: 'SUBSCRIBED', views: 2 });
+  });
+
+  it('narrows the metrics to what subscribedStatus accepts, and says what it cost', async () => {
+    // The whole query fails if any of these three is requested alongside the
+    // segment — so `daily --segment subscribedStatus` returns nothing at all
+    // unless they are dropped first.
+    const { analytics, calls } = analyticsApi(() => REAL_DAILY_SUBSCRIBED);
+    const dropped = [];
+    await fetchDailyAnalytics(
+      { analytics },
+      { startDate: 'a', endDate: 'b', segment: 'subscribedStatus', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].metrics).toBe(
+      'views,engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,shares',
+    );
+    expect(dropped).toEqual(['comments', 'subscribersGained', 'subscribersLost']);
+  });
+
+  it('narrows further for youtubeProduct, which rejects every engagement metric', async () => {
+    const { analytics, calls } = analyticsApi(() => REAL_DAILY_SUBSCRIBED);
+    const dropped = [];
+    await fetchDailyAnalytics(
+      { analytics },
+      { startDate: 'a', endDate: 'b', segment: 'youtubeProduct', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(calls[0].metrics).toBe('views,engagedViews,estimatedMinutesWatched,averageViewDuration');
+    expect(dropped).toEqual(
+      expect.arrayContaining(['likes', 'dislikes', 'comments', 'shares', 'subscribersGained', 'subscribersLost']),
+    );
+  });
+
+  it('a dropped metric reads as null, never zero', async () => {
+    const { analytics } = analyticsApi(() => REAL_DAILY_SUBSCRIBED);
+    const rows = await fetchDailyAnalytics(
+      { analytics },
+      { startDate: 'a', endDate: 'b', segment: 'subscribedStatus' },
+    );
+    expect(rows[0].subscribersGained).toBeNull();
+    expect(rows[0].comments).toBeNull();
+  });
+
+  it('leaves an unsegmented query byte-for-byte unchanged', async () => {
+    // The default shape is the contract every existing consumer already reads.
+    const { analytics, calls } = analyticsApi(() => resp(['day', 'views'], [['2026-03-01', 1]]));
+    const rows = await fetchDailyAnalytics({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].dimensions).toBe('day');
+    expect(calls[0].metrics).toBe(
+      'views,engagedViews,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained,subscribersLost',
+    );
+    expect(rows[0]).not.toHaveProperty('subscribedStatus');
+    expect(rows[0]).not.toHaveProperty('youtubeProduct');
+  });
+
+  it('still tiers within the narrowed set when a channel rejects engagedViews', async () => {
+    // Narrowing for the segment and tiering for the channel are independent —
+    // losing one must not disable the other.
+    const { analytics, calls } = analyticsApi(params => {
+      if (params.metrics.includes('engagedViews')) throw NOT_SUPPORTED;
+      return REAL_DEVICES_PRODUCT;
+    });
+    const dropped = [];
+    const rows = await fetchDeviceTypes(
+      { analytics },
+      { startDate: 'a', endDate: 'b', segment: 'youtubeProduct', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].metrics).toBe('views,estimatedMinutesWatched');
+    expect(dropped).toContain('engagedViews');
+    expect(rows[0]).toMatchObject({ deviceType: 'DESKTOP', youtubeProduct: 'CORE', views: 92 });
+  });
+
+  it.each([
+    ['traffic sources', fetchTrafficSources, 'insightTrafficSourceType'],
+    ['content types', fetchContentTypes, 'creatorContentType'],
+    ['geography', fetchGeography, 'country'],
+    ['playback locations', fetchPlaybackLocations, 'insightPlaybackLocationType'],
+    ['video analytics', fetchVideoAnalytics, 'video'],
+  ])('%s appends the segment to its own dimension', async (_name, fn, dimension) => {
+    const { analytics, calls } = analyticsApi(() => resp([dimension, 'subscribedStatus', 'views'], [['x', 'SUBSCRIBED', 1]]));
+    const rows = await fn({ analytics }, { startDate: 'a', endDate: 'b', segment: 'subscribedStatus' });
+
+    expect(calls[0].dimensions).toBe(`${dimension},subscribedStatus`);
+    expect(rows[0].subscribedStatus).toBe('SUBSCRIBED');
+  });
+
+  it('demographics takes the dimension without narrowing, since viewerPercentage survives', async () => {
+    const { analytics, calls } = analyticsApi(
+      () => resp(['ageGroup', 'gender', 'subscribedStatus', 'viewerPercentage'], [['age25-34', 'male', 'SUBSCRIBED', 12.5]]),
+    );
+    const rows = await fetchDemographics({ analytics }, { startDate: 'a', endDate: 'b', segment: 'subscribedStatus' });
+
+    expect(calls[0].dimensions).toBe('ageGroup,gender,subscribedStatus');
+    expect(calls[0].metrics).toBe('viewerPercentage');
+    expect(rows[0]).toEqual({ ageGroup: 'age25-34', gender: 'male', subscribedStatus: 'SUBSCRIBED', viewerPercentage: 12.5 });
+  });
+
+  it('never segments the fragile insightTrafficSourceDetail fetchers', async () => {
+    // They tolerate only `views` and break on an added dimension, so a segment
+    // must not reach them even if a library caller passes one.
+    const { analytics, calls } = analyticsApi(() => resp(['insightTrafficSourceDetail', 'views'], [['x', 1]]));
+    await fetchSearchTerms({ analytics }, { startDate: 'a', endDate: 'b', segment: 'subscribedStatus' });
+    await fetchTrafficSourceDetails(
+      { analytics },
+      { startDate: 'a', endDate: 'b', sourceType: 'YT_SEARCH', segment: 'subscribedStatus' },
+    );
+
+    expect(calls[0].dimensions).toBe('insightTrafficSourceDetail');
+    expect(calls[1].dimensions).toBe('insightTrafficSourceDetail');
+  });
+
+  it('passes an unrecognised segment through so the API, not this table, judges it', async () => {
+    const { analytics, calls } = analyticsApi(() => resp(['deviceType', 'audienceType', 'views'], [['MOBILE', 'ORGANIC', 3]]));
+    await fetchDeviceTypes({ analytics }, { startDate: 'a', endDate: 'b', segment: 'audienceType' });
+
+    expect(calls[0].dimensions).toBe('deviceType,audienceType');
+    expect(calls[0].metrics).toBe('views,engagedViews,estimatedMinutesWatched');
+  });
+});
+
 describe('Reporting API — job coverage', () => {
   const reportingApi = ({ reportTypes = [], jobs = [], createFails = [] } = {}) => {
     const created = [];

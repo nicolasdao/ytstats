@@ -27,6 +27,54 @@ async function query(apis, { startDate, endDate, metrics, dimensions, filters, s
 
 const num = v => (v === undefined || v === null ? null : v);
 
+/**
+ * Metrics each segment dimension accepts. Captured against a live channel on
+ * 2026-07-30 by requesting every metric individually.
+ *
+ * A segment does not merely partition a report — it also restricts which metrics
+ * that report may request, and an unsupported metric fails the WHOLE query rather
+ * than returning a null column. `day,subscribedStatus` with the unsegmented daily
+ * metric list returns nothing at all; drop `comments`, `subscribersGained` and
+ * `subscribersLost` and the same query returns rows.
+ *
+ * youtubeProduct is stricter still: it rejects every engagement and subscriber
+ * metric, keeping only view and watch-time figures.
+ */
+const SEGMENT_METRICS = {
+  subscribedStatus: ['views', 'engagedViews', 'estimatedMinutesWatched', 'averageViewDuration',
+    'averageViewPercentage', 'likes', 'dislikes', 'shares'],
+  youtubeProduct: ['views', 'engagedViews', 'estimatedMinutesWatched', 'averageViewDuration',
+    'averageViewPercentage'],
+};
+
+/**
+ * Append a segment dimension and narrow each metric tier to what it accepts.
+ *
+ * Whatever the segment costs is reported through `onDegraded`, exactly as a tiered
+ * metric drop is — a caller must never receive a null column with nothing saying
+ * why. An unknown segment passes through untouched so the API, not this table, has
+ * the final word on a dimension it has not been taught about.
+ */
+function withSegment({ dimensions, tiers, segment, onDegraded }) {
+  if (!segment) return { dimensions, tiers };
+  const dims = `${dimensions},${segment}`;
+
+  const allowed = SEGMENT_METRICS[segment];
+  if (!allowed) return { dimensions: dims, tiers };
+
+  const dropped = tiers[0].split(',').filter(m => !allowed.includes(m));
+  if (dropped.length) onDegraded?.(dropped);
+
+  const narrowed = tiers
+    .map(t => t.split(',').filter(m => allowed.includes(m)).join(','))
+    .filter((t, i, all) => t && all.indexOf(t) === i);
+
+  return { dimensions: dims, tiers: narrowed };
+}
+
+/** Surface the segment as a column, so a row says which slice it belongs to. */
+const seg = (r, segment) => (segment ? { [segment]: r[segment] ?? null } : {});
+
 const isUnsupported = err =>
   err?.code === ERROR_CODES.QUERY_NOT_SUPPORTED || err?.diagnostic?.code === 'API_QUERY_NOT_SUPPORTED';
 
@@ -71,23 +119,26 @@ async function queryTiered(apis, params, tiers, onDegraded) {
  */
 const DAILY_METRICS = 'estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained,subscribersLost';
 
-export async function fetchDailyAnalytics(apis, { startDate, endDate, onDegraded }) {
+export async function fetchDailyAnalytics(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    // Thumbnail impressions/CTR are documented for this API but always fail;
+    // reach data comes from the Reporting API instead.
+    dimensions: 'day',
+    tiers: [`views,engagedViews,${DAILY_METRICS}`, `views,${DAILY_METRICS}`],
+    segment,
+    onDegraded,
+  });
+
   const data = await queryTiered(
     apis,
-    {
-      startDate,
-      endDate,
-      // Thumbnail impressions/CTR are documented for this API but always fail;
-      // reach data comes from the Reporting API instead.
-      dimensions: 'day',
-      sort: 'day',
-    },
-    [`views,engagedViews,${DAILY_METRICS}`, `views,${DAILY_METRICS}`],
+    { startDate, endDate, dimensions, sort: 'day' },
+    tiers,
     onDegraded,
   );
 
   return rowsFromAnalytics(data).map(r => ({
     date: r.day,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
@@ -124,22 +175,30 @@ export async function fetchCardMetrics(apis, { startDate, endDate }) {
 
 const VIDEO_METRICS = 'estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained,subscribersLost';
 
-export async function fetchVideoAnalytics(apis, { startDate, endDate, maxResults = MAX_VIDEO_ROWS, onDegraded }) {
+export async function fetchVideoAnalytics(apis, { startDate, endDate, maxResults = MAX_VIDEO_ROWS, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'video',
+    tiers: [`views,engagedViews,${VIDEO_METRICS}`, `views,${VIDEO_METRICS}`],
+    segment,
+    onDegraded,
+  });
+
   const data = await queryTiered(
     apis,
     {
       startDate,
       endDate,
-      dimensions: 'video',
+      dimensions,
       sort: '-views',
       maxResults: Math.min(maxResults, MAX_VIDEO_ROWS),
     },
-    [`views,engagedViews,${VIDEO_METRICS}`, `views,${VIDEO_METRICS}`],
+    tiers,
     onDegraded,
   );
 
   return rowsFromAnalytics(data).map(r => ({
     videoId: r.video,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
@@ -153,44 +212,61 @@ export async function fetchVideoAnalytics(apis, { startDate, endDate, maxResults
   }));
 }
 
-export async function fetchTrafficSources(apis, { startDate, endDate, onDegraded }) {
+export async function fetchTrafficSources(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'insightTrafficSourceType',
+    tiers: ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    segment,
+    onDegraded,
+  });
   const data = await queryTiered(
     apis,
-    { startDate, endDate, dimensions: 'insightTrafficSourceType', sort: '-views' },
-    ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    { startDate, endDate, dimensions, sort: '-views' },
+    tiers,
     onDegraded,
   );
   return rowsFromAnalytics(data).map(r => ({
     sourceType: r.insightTrafficSourceType,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
   }));
 }
 
-export async function fetchDemographics(apis, { startDate, endDate }) {
+export async function fetchDemographics(apis, { startDate, endDate, segment }) {
+  // The one report whose metric (viewerPercentage) no segment restricts, so it
+  // needs no narrowing — only the extra dimension.
   const data = await query(apis, {
     startDate,
     endDate,
     metrics: 'viewerPercentage',
-    dimensions: 'ageGroup,gender',
+    dimensions: segment ? `ageGroup,gender,${segment}` : 'ageGroup,gender',
   });
   return rowsFromAnalytics(data).map(r => ({
     ageGroup: r.ageGroup,
     gender: r.gender,
+    ...seg(r, segment),
     viewerPercentage: num(r.viewerPercentage),
   }));
 }
 
-export async function fetchDeviceTypes(apis, { startDate, endDate, onDegraded }) {
+export async function fetchDeviceTypes(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'deviceType',
+    tiers: ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    segment,
+    onDegraded,
+  });
   const data = await queryTiered(
     apis,
-    { startDate, endDate, dimensions: 'deviceType', sort: '-views' },
-    ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    { startDate, endDate, dimensions, sort: '-views' },
+    tiers,
     onDegraded,
   );
   return rowsFromAnalytics(data).map(r => ({
     deviceType: r.deviceType,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
@@ -207,15 +283,22 @@ export async function fetchDeviceTypes(apis, { startDate, endDate, onDegraded })
 // `views` alone overstates Shorts against long-form after April 2025.
 const CONTENT_TYPE_METRICS = 'estimatedMinutesWatched,likes,shares,subscribersGained,subscribersLost';
 
-export async function fetchContentTypes(apis, { startDate, endDate, onDegraded }) {
+export async function fetchContentTypes(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'creatorContentType',
+    tiers: [`views,engagedViews,${CONTENT_TYPE_METRICS}`, `views,${CONTENT_TYPE_METRICS}`],
+    segment,
+    onDegraded,
+  });
   const data = await queryTiered(
     apis,
-    { startDate, endDate, dimensions: 'creatorContentType', sort: '-views' },
-    [`views,engagedViews,${CONTENT_TYPE_METRICS}`, `views,${CONTENT_TYPE_METRICS}`],
+    { startDate, endDate, dimensions, sort: '-views' },
+    tiers,
     onDegraded,
   );
   return rowsFromAnalytics(data).map(r => ({
     contentType: r.creatorContentType,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
@@ -244,15 +327,22 @@ export async function fetchSearchTerms(apis, { startDate, endDate, maxResults = 
 
 const GEO_METRICS = 'estimatedMinutesWatched,subscribersGained,subscribersLost';
 
-export async function fetchGeography(apis, { startDate, endDate, maxResults = 50, onDegraded }) {
+export async function fetchGeography(apis, { startDate, endDate, maxResults = 50, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'country',
+    tiers: [`views,engagedViews,${GEO_METRICS}`, `views,${GEO_METRICS}`],
+    segment,
+    onDegraded,
+  });
   const data = await queryTiered(
     apis,
-    { startDate, endDate, dimensions: 'country', sort: '-views', maxResults },
-    [`views,engagedViews,${GEO_METRICS}`, `views,${GEO_METRICS}`],
+    { startDate, endDate, dimensions, sort: '-views', maxResults },
+    tiers,
     onDegraded,
   );
   return rowsFromAnalytics(data).map(r => ({
     country: r.country,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
@@ -261,15 +351,22 @@ export async function fetchGeography(apis, { startDate, endDate, maxResults = 50
   }));
 }
 
-export async function fetchPlaybackLocations(apis, { startDate, endDate, onDegraded }) {
+export async function fetchPlaybackLocations(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'insightPlaybackLocationType',
+    tiers: ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    segment,
+    onDegraded,
+  });
   const data = await queryTiered(
     apis,
-    { startDate, endDate, dimensions: 'insightPlaybackLocationType', sort: '-views' },
-    ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    { startDate, endDate, dimensions, sort: '-views' },
+    tiers,
     onDegraded,
   );
   return rowsFromAnalytics(data).map(r => ({
     locationType: r.insightPlaybackLocationType,
+    ...seg(r, segment),
     views: num(r.views),
     engagedViews: num(r.engagedViews),
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
