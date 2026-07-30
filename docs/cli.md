@@ -218,15 +218,73 @@ They also raise `ANALYTICS_METRICS_UNSUPPORTED` when a metric this channel canno
 |---|---|---|
 | `channel` | Channel metadata and lifetime stats *(no period; no date flags)* | — |
 | `videos` | Every video with metadata and current counts *(no period; no date flags)* | see below |
-| `daily` | Day-by-day views, watch time, likes, comments, subscribers | — |
-| `traffic` | Views by traffic source type | — |
-| `demographics` | Viewer age and gender split | — |
-| `devices` | Views by device type | — |
-| `content-types` | Shorts vs long-form vs live, using YouTube's own `creatorContentType` | — |
+| `daily` | Day-by-day views, watch time, likes, comments, subscribers | `--segment` |
+| `traffic` | Views by traffic source type | `--segment` |
+| `demographics` | Viewer age and gender split | `--segment` |
+| `devices` | Views by device type | `--segment` |
+| `content-types` | Shorts vs long-form vs live, using YouTube's own `creatorContentType` | `--segment` |
 | `search-terms` | What people search on YouTube to find the channel | `-n, --limit` (default `25`, capped at 25) |
-| `geography` | Viewer breakdown by country | `-n, --limit` (default `50`) |
-| `playback-locations` | Where viewers watch — Shorts feed, watch page, embedded | — |
-| `video-analytics` | Per-video metrics, top 200 by views | — |
+| `geography` | Viewer breakdown by country | `-n, --limit` (default `50`), `--segment` |
+| `playback-locations` | Where viewers watch — Shorts feed, watch page, embedded | `--segment` |
+| `video-analytics` | Per-video metrics, top 200 by views | `--segment` |
+
+### --segment
+
+```bash
+ytstats <command> --segment subscribedStatus
+ytstats <command> --segment youtubeProduct
+```
+
+Partitions an existing report by a second dimension instead of producing a new
+dataset. Each row gains a column named after the segment, and the rows **divide**
+the unsegmented total rather than adding to it — summing the segments reproduces
+the figure you get without the flag.
+
+| Value | Splits rows by | Column values |
+|---|---|---|
+| `subscribedStatus` | Whether the viewer subscribed to the channel | `SUBSCRIBED`, `UNSUBSCRIBED` |
+| `youtubeProduct` | Which YouTube surface the view happened on | `CORE` is the main app and site; Google also documents `GAMING`, `KIDS`, `LIVE` and `MUSIC` |
+
+```bash
+ytstats daily --days 7 --segment subscribedStatus 2>/dev/null \
+  | jq -r '.data.rows[] | "\(.date)  \(.subscribedStatus)  \(.views)"'
+```
+
+**A segment costs metrics, and the command says which.** A segment does not only
+partition a report — it also restricts which metrics that report may request, and
+an unsupported metric fails the *whole* query rather than returning a null column.
+`ytstats` narrows the request to what the segment accepts and reports the
+difference as an `ANALYTICS_METRICS_UNSUPPORTED` warning naming every dropped
+metric. **A `null` there means unknown, never zero.**
+
+| Segment | Metrics dropped |
+|---|---|
+| `subscribedStatus` | `comments`, `subscribersGained`, `subscribersLost` |
+| `youtubeProduct` | the above plus `likes`, `dislikes`, `shares` |
+
+**Not every command accepts every segment.** Support varies by report *and* by
+channel, so a combination YouTube refuses surfaces as `API_QUERY_NOT_SUPPORTED`
+(exit 4) rather than as an empty result — an empty dataset would read as "no
+activity". Verified against a live channel on 2026-07-30:
+
+| Command | `subscribedStatus` | `youtubeProduct` |
+|---|---|---|
+| `daily` | ✅ | ✅ |
+| `devices` | ✅ | ✅ |
+| `content-types` | ✅ | ✅ |
+| `geography` | ✅ | ✅ |
+| `traffic` | ✅ | ❌ rejected |
+| `playback-locations` | ✅ | ❌ rejected |
+| `demographics` | ✅ | ❌ rejected |
+| `video-analytics` | ❌ rejected | ❌ rejected |
+
+`search-terms` **rejects `--segment` before authenticating**, with
+`INPUT_INVALID_CHOICE` (exit 3). It reads the `insightTrafficSourceDetail`
+dimension, which tolerates only the `views` metric and fails outright when a
+second dimension is added — see [the gotcha](gotchas/youtube-api.md#traffic-source-detail-queries-are-fragile-in-three-separate-ways).
+Refusing locally turns an opaque YouTube error into one that names the flag.
+
+Without the flag, rows are exactly as they were before it existed.
 
 ### channel
 

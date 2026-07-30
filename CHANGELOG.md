@@ -6,6 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--segment <dimension>` on the dataset commands**, partitioning an existing
+  report by `subscribedStatus` or `youtubeProduct` instead of adding a new one.
+  Each row gains a column named after the segment, and the segments **divide** the
+  unsegmented total rather than adding to it. Available on `daily`, `traffic`,
+  `demographics`, `devices`, `content-types`, `geography`, `playback-locations`
+  and `video-analytics`; the default shape is unchanged when the flag is absent.
+
+  Two behaviours are worth knowing before reading a segmented result:
+
+  - **A segment costs metrics.** It restricts which metrics its report may
+    request, and an unsupported metric fails the whole query rather than returning
+    a null column — `day,subscribedStatus` with the full daily metric list returns
+    nothing at all. The request is narrowed to what the segment accepts and the
+    difference is reported as an `ANALYTICS_METRICS_UNSUPPORTED` warning naming
+    every dropped metric. `subscribedStatus` costs `comments`,
+    `subscribersGained` and `subscribersLost`; `youtubeProduct` costs those plus
+    `likes`, `dislikes` and `shares`. **A `null` there means unknown, never zero.**
+  - **Not every command serves every segment.** Support varies by report and by
+    channel, so a refused combination surfaces as `API_QUERY_NOT_SUPPORTED` rather
+    than as an empty dataset, which would read as "no activity". The matrix
+    verified against a live channel is in [docs/cli.md](docs/cli.md#--segment).
+
+  `search-terms` **rejects** `--segment` with `INPUT_INVALID_CHOICE` before
+  authenticating. It reads the `insightTrafficSourceDetail` dimension, which
+  tolerates only the `views` metric and fails outright on a second dimension.
+
 ## [0.7.1] - 2026-07-30
 
 ### Fixed

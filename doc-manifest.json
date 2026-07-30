@@ -38,7 +38,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 311,
+      "line_count": 319,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -180,6 +180,7 @@
         "import-legacy",
         "fetch",
         "Dataset commands",
+        "--segment",
         "channel",
         "videos",
         "retention",
@@ -190,7 +191,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 425,
+      "line_count": 483,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -512,6 +513,7 @@
         "Reach reports overlap, so rows must be deduped",
         "Per-video analytics rejects maxResults above 200",
         "Traffic source detail queries are fragile in three separate ways",
+        "A segment dimension silently restricts which metrics a report may request",
         "`views` changed meaning on 30 April 2025",
         "An unsupported metric fails the whole query, not just its column",
         "Retention ratios legitimately exceed 1.0",
@@ -525,8 +527,9 @@
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 318,
+      "line_count": 360,
       "links_to": [
+        "docs/cli.md",
         "docs/gotchas/auth.md",
         "docs/youtube-apis.md"
       ],
@@ -655,6 +658,7 @@
         "Quota costs",
         "Analytics API v2",
         "Fetchers",
+        "Segmentation",
         "Metric tiers",
         "Reading retention",
         "Notable omission",
@@ -667,8 +671,9 @@
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 257,
+      "line_count": 293,
       "links_to": [
+        "docs/cli.md",
         "docs/gotchas/youtube-api.md"
       ],
       "over_size": false,

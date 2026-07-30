@@ -190,7 +190,49 @@ The `insightTrafficSourceDetail` dimension has three distinct traps:
 2. With `maxResults` too high (50+) it returns `Internal error encountered.` The safe ceiling is **25**.
 3. Combining it with `estimatedMinutesWatched` also triggers an internal error. Only `views` is reliable.
 
-**Where handled:** `MAX_DETAIL_ROWS` and the hard-coded `metrics: 'views'` in `fetchSearchTerms()` and `fetchTrafficSourceDetails()`, `src/api/analytics.js`. Tests assert all three.
+A fourth follows from the third: adding a **second dimension** breaks it too, which is why `search-terms` refuses `--segment` locally rather than letting YouTube answer with an error naming neither the flag nor the reason. Neither detail fetcher accepts a `segment` argument at all, and a test asserts that a caller passing one cannot change their `dimensions`.
+
+**Where handled:** `MAX_DETAIL_ROWS` and the hard-coded `metrics: 'views'` in `fetchSearchTerms()` and `fetchTrafficSourceDetails()`, `src/api/analytics.js`; the `segmentable: false` rejection in `simple()`, `src/cli.js`. Tests assert all four.
+
+## A segment dimension silently restricts which metrics a report may request
+
+Adding `subscribedStatus` or `youtubeProduct` to a report looks like it only splits
+the rows. It also shrinks the metric list that report is allowed to ask for — and
+because [an unsupported metric fails the whole query](#an-unsupported-metric-fails-the-whole-query-not-just-its-column),
+requesting the unsegmented metric list alongside a segment returns **nothing at
+all**, not a partial answer.
+
+`day` with the ten daily metrics works. `day,subscribedStatus` with the same ten
+returns `The query is not supported.` Drop `comments`, `subscribersGained` and
+`subscribersLost` and it returns rows. Probed metric by metric against a live
+channel on 2026-07-30:
+
+| Segment | Rejects |
+|---|---|
+| `subscribedStatus` | `comments`, `subscribersGained`, `subscribersLost` |
+| `youtubeProduct` | those three plus `likes`, `dislikes`, `shares` — every engagement metric |
+
+The trap is that the existing tiered fallback does **not** rescue this. Both daily
+tiers differ only by `engagedViews`, so both contain `comments` and both fail; the
+command errors out entirely rather than degrading. Tiering answers "which metrics
+does this *channel* serve" — it cannot answer "which metrics does this *dimension*
+allow", because the whole tier list sits above the ceiling.
+
+`withSegment()` therefore narrows every tier up front and reports the difference
+through `onDegraded`, so the loss arrives as an `ANALYTICS_METRICS_UNSUPPORTED`
+warning naming each metric rather than as three silent nulls.
+
+Dimension support varies independently of metric support, and per channel:
+`video` refuses both segments outright, and `youtubeProduct` is refused on
+`insightTrafficSourceType`, `insightPlaybackLocationType` and `ageGroup,gender`.
+Those surface as `API_QUERY_NOT_SUPPORTED` rather than an empty dataset — the
+verified matrix is in [cli.md](../cli.md#--segment). Do not convert it into a
+hardcoded per-command allow-list: it was measured on one channel, and this project
+has repeatedly found per-channel variation.
+
+**Where handled:** `SEGMENT_METRICS` and `withSegment()` in `src/api/analytics.js`,
+pinned by tests using captured segmented payloads; the `--segment` option and the
+`search-terms` rejection in `simple()`, `src/cli.js`.
 
 ## `views` changed meaning on 30 April 2025
 

@@ -136,6 +136,42 @@ The `views`-only metric lists on the two detail fetchers are not an oversight: a
 
 Tests assert the **exact query parameters** each fetcher sends. That is what pins these limits rather than merely documenting them.
 
+### Segmentation
+
+Every fetcher above except the two `insightTrafficSourceDetail` ones takes an
+optional `segment`, which appends a second dimension — `subscribedStatus` or
+`youtubeProduct` — to its own and surfaces the value as a column on each row.
+Surfaced as `--segment` on the dataset commands.
+
+`withSegment()` does two things, and the second is the one that is easy to miss:
+
+1. Appends the dimension: `day` becomes `day,subscribedStatus`.
+2. **Narrows every metric tier to what that segment accepts.** A segment restricts
+   the metric list of the report it partitions, and an unsupported metric fails the
+   whole query — so requesting the unsegmented metric list alongside a segment
+   returns no data at all.
+
+| Segment | Metrics it accepts |
+|---|---|
+| `subscribedStatus` | `views`, `engagedViews`, `estimatedMinutesWatched`, `averageViewDuration`, `averageViewPercentage`, `likes`, `dislikes`, `shares` |
+| `youtubeProduct` | the first five only — it rejects every engagement metric |
+
+Both lists were captured by requesting each metric individually against a live
+channel on 2026-07-30. Whatever the narrowing costs is reported through the same
+`onDegraded` callback a tier drop uses, so it reaches the caller as an
+`ANALYTICS_METRICS_UNSUPPORTED` warning naming each dropped metric.
+
+Narrowing and tiering are independent: a segmented query still falls back from
+`engagedViews` if this channel rejects it.
+
+An unrecognised segment passes through untouched, leaving the API — not the table
+above — to judge a dimension it has not been taught about. `fetchDemographics`
+needs no narrowing, because `viewerPercentage` is the one metric no segment
+restricts.
+
+Which combinations a channel actually serves varies by report; the verified matrix
+is in [cli.md](cli.md#--segment). A rejection surfaces as `API_QUERY_NOT_SUPPORTED`.
+
 ### Metric tiers
 
 The Analytics API rejects the **whole query** when a channel cannot serve one requested metric — it does not return a null column. Requesting a newer metric unconditionally would therefore turn a working dataset into no dataset for anyone whose channel lacks it.

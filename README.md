@@ -157,6 +157,12 @@ ytstats login | logout | status | doctor | use <channel> | import-legacy <file>
 
 All analytics commands accept `--days N`, or `--start YYYY-MM-DD --end YYYY-MM-DD`. Global flags: `-a, --account <channel>`, `--compact`, `-q, --quiet`.
 
+Most dataset commands also take `--segment subscribedStatus` or `--segment youtubeProduct`, which partitions the rows you already get by a second dimension instead of adding a dataset:
+
+```bash
+ytstats daily --days 30 --segment subscribedStatus   # subscribers vs everyone else
+```
+
 Full reference with every flag and default: [docs/cli.md](docs/cli.md).
 
 ### Self-diagnosis
@@ -249,6 +255,8 @@ The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own 
 **CTR only comes from `ytstats reach`.** The Analytics API documents `videoThumbnailImpressions` but it has never worked ([issue 254665034](https://issuetracker.google.com/issues/254665034)). CTR is served asynchronously by the Reporting API instead: the first `reach` run only creates a job, and data appears **24-48 hours later** with a 30-day backfill. It's also permanently 1-2 days behind — the same lag YouTube Studio shows.
 
 **Retention ratios above 1.0 are correct.** A Short showing `1.54` means viewers looped it. Not a bug, and never clamped.
+
+**A `--segment` splits the rows you already have, and costs you columns.** Segmented rows partition the total rather than adding to it — summing them reproduces the unsegmented figure. Less obviously, a segment restricts which metrics its report may request, and an unsupported metric fails the *whole* query rather than returning a null column. `ytstats` narrows the request and reports what that cost as an `ANALYTICS_METRICS_UNSUPPORTED` warning: `subscribedStatus` gives up `comments` and the subscriber counts, `youtubeProduct` gives up every engagement metric. Those fields read `null`, meaning unknown, never zero.
 
 **Shorts detection is duration-based.** ≤60s is `SHORTS`. A 62-second video meant as a Short will read `VIDEO_ON_DEMAND`. YouTube's own classification uses extra signals — read `content-types` for its opinion.
 
