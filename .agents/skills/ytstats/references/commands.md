@@ -177,7 +177,9 @@ A video with captions turned off returns `cues: []`, `trackId: null`, a `DATA_EM
 
 Only works for videos on a channel the user owns: `captions.download` requires edit permission on the video.
 
-**Expensive, and cached for that reason.** `captions.download` costs **200 quota units** against the 10,000/day budget — about 50 transcripts a day, the priciest call the CLI makes. Results are cached locally and keyed on the caption track's `lastUpdated`, so a repeat run for an unchanged track costs 50 (the listing) instead of 250. Do not loop it over a whole channel; pull the videos that matter. Requires ytstats 0.7.0+.
+**Repetition is already removed.** YouTube's auto-captions roll — each cue restates the previous one before adding new words — and the CLI strips that, so a sentence appears once, at the moment it was said. Trust the `start` you are given; do not de-duplicate again.
+
+**Expensive, and cached for that reason.** `captions.download` costs **200 quota units** against the 10,000/day budget — about 50 transcripts a day, the priciest call the CLI makes. Results are cached locally and keyed on the caption track's `lastUpdated`, so a repeat run for an unchanged track costs 50 (the listing) instead of 250. Do not loop it over a whole channel; pull the videos that matter. Requires ytstats 0.7.1+ — on 0.7.0 this command returned zero cues for every video.
 
 ### reach and reach-jobs
 

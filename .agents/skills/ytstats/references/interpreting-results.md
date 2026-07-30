@@ -90,6 +90,12 @@ The CLI prefers an author-written track and falls back to ASR, but it always rep
 
 This matters most in exactly the case the feature is for: explaining a retention drop-off. Recommending someone cut a line that they never actually said is worse than saying nothing.
 
+## An empty transcript on ytstats 0.7.0 is a bug, not a silent video
+
+If `transcript` returns `cues: []` with a `DATA_EMPTY` warning, check `meta.version` before telling the user anything. On **0.7.0** the command returned zero cues for *every* video — the caption body was read as a string when the API returns a Blob — so an empty result there says nothing about the video. Tell the user to upgrade (`npx ytstats@latest`), do not report "this video has no captions".
+
+From 0.7.1 an empty result is trustworthy, and means what the next section says.
+
 ## An empty transcript means no captions, not no speech
 
 `cues: []` with `trackId: null` and a `DATA_EMPTY` warning means the video has no usable caption track — captions were never generated or are still processing, or every track is a draft. It does **not** mean the video is silent, and it does not mean the command failed.

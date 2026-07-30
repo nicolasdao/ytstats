@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1] - 2026-07-30
+
+### Changed
+- Require `ytstats` 0.7.1 or newer, up from 0.7.0. On 0.7.0 the `transcript` command this skill routes to returned **zero cues for every video** — `captions.download` returns a Blob and the body was read as a string, so a working transcript looked exactly like a video with no captions (`ok: true`, a track reported, and a `DATA_EMPTY` warning). An agent following this skill on 0.7.0 would tell a user their video has no captions when it has them — the same class of confidently-wrong answer as the 0.2.1 CTR floor raise. 0.7.1 also normalizes `trackKind` to upper case, which this skill's "an ASR track is not a quote" rule branches on.
+
+### Added
+- Note that auto-caption repetition is removed by the CLI, so a sentence appears once at the moment it was said. Agents quoting a transcript against a retention dip can trust the timestamp rather than de-duplicating themselves.
+
 ## [0.8.0] - 2026-07-30
 
 ### Added
