@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-410 tests across 14 files. **None of them requires network access**, and none opens a browser.
+422 tests across 15 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 
@@ -24,7 +24,9 @@ npm run coverage  # vitest run --coverage
 
 ## Injection is the strategy
 
-The suite runs offline because every effect is a parameter with a real default. `buildProgram()` takes `stdout`, `stderr`, `exit`, `session`, and `now`; `login()` takes `OAuth2`, `startLoopbackServer`, `openBrowser`, `fetchIdentity`, `promptForRedirectUrl`, and `log`; `fetchAll()` takes a `fetchers` bundle; every API fetcher takes `apis` as its first argument.
+The suite runs offline because every effect is a parameter with a real default. `buildProgram()` takes `stdout`, `stderr`, `exit`, `session`, `now`, and `makeApis`; `login()` takes `OAuth2`, `startLoopbackServer`, `openBrowser`, `fetchIdentity`, `promptForRedirectUrl`, and `log`; `fetchAll()` takes a `fetchers` bundle; every API fetcher takes `apis` as its first argument.
+
+**`makeApis` is what makes authenticated commands testable.** It defaults to `createApis`, and until it existed `withApis()` called `createApis` directly — so no test could reach a command body after authentication. That left the question "which warnings does `ytstats daily` emit?" unanswerable in-process, which is how a missing `ANALYTICS_METRICS_UNSUPPORTED` warning survived on seven commands. `test/cli-degradation.test.js` uses this seam.
 
 Nothing is mocked at the module level. Tests hand in plain objects, which means a test breaks when a *contract* changes rather than when an implementation detail moves.
 
@@ -32,16 +34,18 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 
 | File | Tests | Covers |
 |---|---|---|
-| `test/envelope.test.js` | 98 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
+| `test/envelope.test.js` | 104 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
+| `test/api/fetchers.test.js` | 49 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher; metric tiers; job coverage |
+| `test/cli.e2e.test.js` | 43 | The real binary, spawned as a subprocess |
 | `test/api/transforms.test.js` | 33 | Duration parsing, content classification, CSV, date normalization, row zipping |
-| `test/cli.e2e.test.js` | 31 | The real binary, spawned as a subprocess |
-| `test/api/fetchers.test.js` | 31 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher |
-| `test/auth/credentials.test.js` | 25 | Resolution precedence across all five sources, file shapes, service-account rejection, discovery |
-| `test/auth/tokens.test.js` | 23 | Multi-account store, merging, the client binding, default promotion, legacy import |
+| `test/auth/credentials.test.js` | 31 | Resolution precedence across all five sources, file shapes, service-account rejection, discovery |
 | `test/auth/session.test.js` | 26 | `login`, `logout`, `getAuthenticatedClient`, refresh persistence, client-mismatch detection |
+| `test/auth/tokens.test.js` | 26 | Multi-account store, merging, the client binding, default promotion, legacy import |
+| `test/archive.test.js` | 24 | Archive location, dimension detection, append/replay, last-wins, expiry, `sync` idempotence |
 | `test/auth/oauth.test.js` | 18 | PKCE, auth URL construction, and the loopback server over real HTTP |
 | `test/config/store.test.js` | 14 | Atomic writes, permissions, traversal rejection |
 | `test/fetch-all.test.js` | 13 | Orchestration, per-step degradation, fatal codes, retention capping |
+| `test/cli-degradation.test.js` | 12 | Authenticated commands in-process: which warnings a dropped metric produces |
 | `test/dates.test.js` | 11 | Window resolution, calendar validation, bounds |
 | `test/client-id.test.js` | 10 | Client ID pre-flight validation, both tiers |
 | `test/config/paths.test.js` | 8 | Per-OS directory resolution, including Windows and Linux from any host |
@@ -74,7 +78,7 @@ There is also a test asserting `search.list` is never called, protecting the 100
 
 `npm run coverage` currently reports about 71% overall, and two figures need explaining:
 
-**`src/cli.js` reports 0%.** Its 31 end-to-end tests run the file as a **subprocess**, which v8 coverage cannot instrument from the parent process. The file is well covered; the number is a measurement artifact, not a gap. Do not chase it by converting the e2e tests to in-process calls — running the real binary is the point.
+**`src/cli.js` reports far below its real coverage.** Its 43 end-to-end tests run the file as a **subprocess**, which v8 coverage cannot instrument from the parent process. The file is well covered; the number is largely a measurement artifact. Do not chase it by converting the e2e tests to in-process calls — running the real binary is the point. `test/cli-degradation.test.js` does drive `buildProgram()` in-process via `makeApis`, so a slice of `cli.js` is now genuinely instrumented; the two approaches are complementary, not substitutes.
 
 **`src/api/client.js` reports about 33%.** The uncovered lines are `createApis()` and `downloadCsv()`, which construct live googleapis clients and perform real HTTP. Fetchers take the resulting bundle as a parameter, so the tests hand in plain objects and never execute the constructor.
 

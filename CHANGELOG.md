@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Report a dropped metric on every dataset command, not only `retention`. The
+  tiered metric fallback landed in 0.6.0 wired into `retention` and `fetch` but
+  **not** into the `simple()` helper, so `daily`, `traffic`, `devices`,
+  `content-types`, `geography`, `playback-locations` and `video-analytics` could
+  return `engagedViews: null` on every row with no warning at all. That is the
+  same silent-null shape as the reach CSV regression — `ok: true`, correct row
+  count, a column of nulls, and nothing anywhere saying why. All seven now emit
+  `ANALYTICS_METRICS_UNSUPPORTED` with the dropped metric in `context.dropped`.
+  An absent field means unknown, never zero.
+
+### Added
+
+- `buildProgram({ makeApis })` — an injection seam defaulting to `createApis`.
+  Without it `withApis()` constructed the API bundle itself, so no test could
+  drive a command body past authentication; the whole post-auth half of the CLI,
+  including which warnings a command emits, was unreachable from the suite. That
+  is precisely why the missing warning above went unnoticed. `period` is still
+  returned as the clean range, never the object carrying the callback.
+
+### Documented
+
+- The archive is keyed by report type, not by channel. One config directory holds
+  many channels but one file per report type, so syncing two channels from the
+  same directory interleaves them. Rows stay distinguishable by `channel_id` and
+  never overwrite each other, but `archive` totals and `readRows()` cover both.
+  `sync` honours `--account`, so each command behaves correctly and only the
+  store mixes — which is what makes it easy to miss. Give each channel its own
+  `YTSTATS_CONFIG_DIR`.
+
 ## [0.6.0] - 2026-07-30
 
 ### Added

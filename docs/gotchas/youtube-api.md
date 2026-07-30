@@ -68,6 +68,22 @@ The Analytics API needs no equivalent handling. It is a *query* API over YouTube
 
 **Where handled:** `src/archive.js` (append-only NDJSON, last-wins replay), `src/sync.js` (`syncReports`, `findExpiringReports`), the `reports_archived` check in `doctor`, and the `REPORTS_EXPIRING` diagnostic. Never make `sync` mark a report ingested before the append succeeds — the report is gone in 60 days and a retry is the only chance to get it.
 
+## The archive is keyed by report type, not by channel
+
+One config directory holds **many** channels, but the archive under it is one NDJSON file per report type — not per channel per report type. Sync two channels from the same config directory and both land in `channel_reach_basic_a1.ndjson`.
+
+Nothing corrupts: `channel_id` is a column in every report and `keyColumns()` treats it as a dimension, so rows from different channels never collide or overwrite each other. But `archive` reports combined `rows` / `firstDate` / `lastDate` totals across channels, and `readRows()` returns both channels interleaved. A consumer asking "my reach data" gets everyone's.
+
+`sync` itself honours `--account` and pulls only that channel's jobs — so the mixing happens in the *store*, not the fetch. That makes it easy to miss: each individual command behaves correctly.
+
+The fix if you run several channels is the same one that separates their credentials: a config directory each, since `YTSTATS_DATA_DIR` defaults to `<config dir>/data` and therefore moves with it.
+
+```bash
+alias yt-acme='YTSTATS_CONFIG_DIR=~/.ytstats/acme ytstats'
+```
+
+**Where handled:** nowhere in code — this is a documented limitation, not a defence. `channel_id` in `KNOWN_DIMENSIONS` (`src/archive.js`) is what keeps it merely confusing rather than lossy.
+
 ## Last-wins in the archive must resolve by createTime, not file order
 
 Overlapping reports carry corrected figures for days already reported, so the archive dedupes on the row's dimension columns and keeps the newest. The tempting implementation — "later line in the file wins" — is wrong: a re-ingest, a restored backup, or two processes appending can all put an older report's rows after a newer report's, silently overwriting a correction with the figure it corrected.

@@ -26,6 +26,8 @@ source:
 
 Note the deliberate asymmetry: a relative `XDG_CONFIG_HOME` is ignored because the spec says so, while a relative `YTSTATS_CONFIG_DIR` is accepted and resolved — it is an explicit override, not an environment convention.
 
+**One archive holds one channel's data cleanly; several channels share it.** The archive is one file per report type, not per channel, so syncing two channels from the same config directory interleaves them. Rows stay distinguishable by `channel_id` and never overwrite each other, but `archive` totals and `readRows()` cover both — give each channel its own `YTSTATS_CONFIG_DIR`, which carries the archive with it. See [the gotcha](gotchas/youtube-api.md#the-archive-is-keyed-by-report-type-not-by-channel).
+
 **Point `YTSTATS_DATA_DIR` somewhere you back up.** The archive under it is the only copy of any Reporting API data older than 60 days — Google deletes reports 60 days after generating them (30 days for backfill reports). Everything else `ytstats` stores can be recreated by logging in again; this cannot be recreated at all.
 
 ## The config directory

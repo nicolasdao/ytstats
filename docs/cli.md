@@ -206,6 +206,8 @@ ytstats fetch --reach                       # includes CTR, if reports exist yet
 
 All of these accept the date window flags above and return `{ period, rows }`. An empty `rows` array raises a `DATA_EMPTY` warning so "the query worked and found nothing" is distinguishable from "the query failed".
 
+They also raise `ANALYTICS_METRICS_UNSUPPORTED` when a metric this channel cannot serve was dropped from the query — `context.dropped` names it. Without that warning a null column is indistinguishable from a genuine zero, which is the failure mode [the reach CSV regression](gotchas/youtube-api.md#the-reach-csv-columns-are-not-called-impressions) took two months to notice. **An absent field means unknown, never zero.**
+
 | Command | Returns | Extra flags |
 |---|---|---|
 | `channel` | Channel metadata and lifetime stats *(no period; no date flags)* | — |
