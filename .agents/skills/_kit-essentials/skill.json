@@ -1,7 +1,7 @@
 {
 	"name": "_kit-essentials",
-	"version": "0.2.0",
-	"description": "Essential skills for any project — memory, specs, version control, reframed answers, verified work, and session state. Bundles Doc Essentials, Reframe Last Answer, Scrutinize and Session Status.",
+	"version": "0.3.0",
+	"description": "Essential skills for any project — memory, specs, version control, reframing, audits, verification. Bundles Doc Essentials, Reframe Last Answer, Scrutinize, Second Opinion and Session Status.",
 	"keywords": [
 		"essentials",
 		"kit",
@@ -17,6 +17,8 @@
 		"scrutinize",
 		"review",
 		"verification",
+		"second-opinion",
+		"audit",
 		"session-status",
 		"status",
 		"ledger",
@@ -33,6 +35,7 @@
 		"nicolasdao/_kit-doc-essentials": "*",
 		"nicolasdao/reframe-last-answer": "*",
 		"nicolasdao/scrutinize": "*",
+		"nicolasdao/second-opinion": "*",
 		"nicolasdao/session-status": "*"
 	}
 }

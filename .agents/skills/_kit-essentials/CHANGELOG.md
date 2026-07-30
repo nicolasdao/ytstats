@@ -2,6 +2,16 @@
 
 All notable changes to the Essentials kit are documented here.
 
+## [0.3.0] - 2026-07-28
+
+### Added
+- `nicolasdao/second-opinion` — a pre-implementation audit of a delivered analysis and fix plan. It re-grounds each claim at primary sources, tests rival explanations for the same symptom, sweeps the proposed changes for side effects on adjacent features, and returns an UPHELD, AMENDED or OVERTURNED verdict. It implements nothing; the human decides what happens next.
+- It pairs with `scrutinize` rather than duplicating it: Scrutinize scopes by diff and runs after the work is done, Second Opinion scopes by argument structure and runs before implementation begins. The two cover opposite ends of the same risk.
+- Version strategy unchanged — always-latest (`*`), consistent with every other member.
+
+### Changed
+- Kit description and keywords updated to name the new member; README "What's Included" extended with a Second Opinion entry that spells out how it differs from Scrutinize.
+
 ## [0.2.0] - 2026-07-26
 
 ### Added
