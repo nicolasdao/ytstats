@@ -8,7 +8,7 @@ import { YtStatsError, ERROR_CODES } from '../errors.js';
  * {
  *   version: 1,
  *   default: "UC...",
- *   accounts: { "UC...": { channelId, channelTitle, customUrl, clientId, tokens, savedAt } }
+ *   accounts: { "UC...": { channelId, channelTitle, customUrl, clientId, scopes, tokens, savedAt } }
  * }
  *
  * Keyed by channel so one machine can hold several channels; `default` is what
@@ -18,6 +18,13 @@ import { YtStatsError, ERROR_CODES } from '../errors.js';
  * is not a secret, and it is not used to authenticate — it exists so that a
  * later run can tell whether the credentials it resolved are the ones the token
  * actually belongs to. Absent on accounts saved before this field existed.
+ *
+ * `scopes` records what Google actually granted, from the `scope` string on the
+ * token response. It matters because not every scope is requested every time:
+ * captions access is opt-in, so a stored token may or may not carry it and the
+ * grant has to be recorded rather than inferred from the default scope list.
+ * Absent (null) on accounts saved before this field existed — which means
+ * unknown, not empty. Scope names are not secrets and are safe to print.
  */
 function emptyStore() {
   return { version: 1, default: null, accounts: {} };
@@ -35,7 +42,7 @@ function write(store) {
 }
 
 /** Persist (or update) one channel's tokens. First account logged in wins the default. */
-export function saveAccount({ channelId, channelTitle, customUrl, clientId, authorizedAt, tokens }) {
+export function saveAccount({ channelId, channelTitle, customUrl, clientId, scopes, authorizedAt, tokens }) {
   if (!channelId) {
     throw new YtStatsError('Cannot save credentials without a channel id.', {
       code: ERROR_CODES.AUTH_FAILED,
@@ -52,6 +59,10 @@ export function saveAccount({ channelId, channelTitle, customUrl, clientId, auth
     // Falls back like the fields above: the refresh-token write-back path calls
     // this without a clientId, and must not erase the binding recorded at login.
     clientId: clientId ?? existing?.clientId ?? null,
+    // Falls back for the same reason as clientId: the refresh write-back supplies
+    // no scopes, and erasing the recorded grant would make every later scope check
+    // read "unknown" — disarming it exactly one refresh after login.
+    scopes: scopes ?? existing?.scopes ?? null,
     // When the refresh token was ISSUED — set at login, preserved across refreshes.
     // `savedAt` cannot serve this purpose: it is rewritten on every token refresh,
     // so for anyone actually using the tool it always reads as "just now", and any
@@ -96,6 +107,7 @@ export function listAccounts() {
     channelTitle: a.channelTitle,
     customUrl: a.customUrl,
     clientId: a.clientId ?? null,
+    scopes: a.scopes ?? null,
     authorizedAt: a.authorizedAt ?? null,
     savedAt: a.savedAt,
     isDefault: a.channelId === store.default,

@@ -181,6 +181,40 @@ describe('login', () => {
     expect(d.openBrowser).toHaveBeenCalledOnce();
   });
 
+  it('records the scopes Google granted, split out of the token response', async () => {
+    // What came back, not what was asked for. The captions scope is opt-in, so the
+    // grant varies per login and cannot be inferred from the SCOPES constant.
+    class Granting extends FakeOAuth2 {
+      async getToken() {
+        return {
+          tokens: {
+            ...TOKENS,
+            scope: 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/yt-analytics.readonly',
+          },
+        };
+      }
+    }
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      deps: deps({ OAuth2: Granting }),
+    });
+    expect(loadAccount('UC-abc').scopes).toEqual([
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/yt-analytics.readonly',
+    ]);
+    expect(listAccounts()[0].scopes).toHaveLength(2);
+  });
+
+  it('stores null rather than synthesizing scopes when the response carries none', async () => {
+    // A fabricated grant record is worse than no record: a pre-flight scope check
+    // would trust it and refuse a call the token is actually authorized to make.
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      deps: deps(),
+    });
+    expect(loadAccount('UC-abc').scopes).toBeNull();
+  });
+
   it('opens the browser at Google, not at the loopback server', async () => {
     const d = deps();
     await login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' }, deps: d });

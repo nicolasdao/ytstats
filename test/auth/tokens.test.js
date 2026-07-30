@@ -214,3 +214,44 @@ describe('authorizedAt tracks token issuance, not last write', () => {
     expect(listAccounts()[0].authorizedAt).toBeNull();
   });
 });
+
+describe('scopes record what Google granted', () => {
+  let tmp;
+  beforeEach(() => { tmp = useTempConfigDir(); });
+  afterEach(() => tmp.cleanup());
+
+  const GRANTED = [
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/yt-analytics.readonly',
+  ];
+
+  it('round-trips the granted scope list', () => {
+    saveAccount({ channelId: 'UC1', scopes: GRANTED, tokens: TOKENS_A });
+    expect(loadAccount('UC1').scopes).toEqual(GRANTED);
+    expect(listAccounts()[0].scopes).toEqual(GRANTED);
+  });
+
+  it('survives a token refresh that supplies no scopes', () => {
+    // The trap this exists for: client.on('tokens') writes back a partial payload,
+    // so erasing scopes here would disarm every scope check one refresh after login.
+    saveAccount({ channelId: 'UC1', scopes: GRANTED, tokens: TOKENS_A });
+    saveAccount({ channelId: 'UC1', tokens: { access_token: 'ya29.rotated' } });
+    expect(loadAccount('UC1').scopes).toEqual(GRANTED);
+  });
+
+  it('re-login replaces the recorded grant rather than merging it', () => {
+    // A second login can request more scopes — or fewer. The newest grant is the
+    // true one; a union would claim access the token does not have.
+    saveAccount({ channelId: 'UC1', scopes: GRANTED, tokens: TOKENS_A });
+    saveAccount({ channelId: 'UC1', scopes: ['https://www.googleapis.com/auth/youtube.readonly'], tokens: TOKENS_B });
+    expect(loadAccount('UC1').scopes).toEqual(['https://www.googleapis.com/auth/youtube.readonly']);
+  });
+
+  it('reads null for accounts stored before the field existed', () => {
+    // Null means unknown, not empty. A pre-flight check must not read it as
+    // "no scopes granted" and reject an account that works.
+    saveAccount({ channelId: 'UC1', tokens: TOKENS_A });
+    expect(loadAccount('UC1').scopes).toBeNull();
+    expect(listAccounts()[0].scopes).toBeNull();
+  });
+});

@@ -172,6 +172,11 @@ export async function login({
     // Record which client issued this token, so a later run with different
     // credentials resolved can say so precisely rather than failing at refresh.
     clientId: credentials.clientId,
+    // What Google actually granted, not what we asked for. The captions scope is
+    // opt-in, so the grant varies per login and cannot be inferred from SCOPES.
+    // Absent means unknown — never synthesized, because a fabricated grant record
+    // is worse than none: a pre-flight scope check would trust it.
+    scopes: tokens.scope ? tokens.scope.split(' ') : null,
     // Only a login issues a refresh token, so this is the one place it is set.
     authorizedAt: new Date().toISOString(),
     tokens,
