@@ -89,6 +89,8 @@ The envelope's `.data` is `{period, warnings, notes, data}` — the datasets sit
 
 Individual steps degrade rather than abort — a rejected demographics query costs you demographics, not the other twelve datasets.
 
+Dataset commands return `{ period, rows }` and raise `DATA_EMPTY` on zero rows, plus `ANALYTICS_METRICS_UNSUPPORTED` when a metric this channel cannot serve was dropped (`context.dropped` names it). Treat a dropped field as **unknown, never zero**.
+
 ## Dataset commands
 
 The date-windowed ones return `{ period, rows }` at `.data`. Two are exceptions: `channel` puts the channel object directly at `.data`, and `videos` puts a bare array there. Zero rows raises a `DATA_EMPTY` **warning**, so "worked and found nothing" is distinguishable from "failed".

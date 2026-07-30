@@ -73,7 +73,7 @@ This matters whenever a question spans that date:
 
 Both fields are present on `daily`, `video-analytics`, `traffic`, `devices`, `content-types`, `geography`, and `playback-locations` (0.6.0+). Use `views` for "what YouTube reports today", `engagedViews` for anything comparative across that boundary — and say which you used.
 
-If `engagedViews` is `null`, this channel cannot serve it; do not substitute `views` silently.
+If `engagedViews` is `null`, this channel cannot serve it; do not substitute `views` silently. A dropped metric always comes with an `ANALYTICS_METRICS_UNSUPPORTED` warning naming it in `context.dropped`, so a null column never lacks a stated reason.
 
 ## Shorts detection is duration-based and disagrees with YouTube
 

@@ -43,8 +43,8 @@ Never parse the prose. `code` is the public contract; the wording is not.
 | `videos` | a bare array | `.data` |
 | `channel` | the channel object | `.data.subscriberCount` |
 | `retention` | `{videoId, period, curve}` | `.data.curve` |
-| `reports` | `{available, active, missing, jobs, coverage}` | `.data.missing` |
-| `sync` | `{jobs, downloaded, skipped, rows, byType, failed, dataDir}` | `.data.downloaded` |
+| `reports` | `{available, active, missing, jobs, jobCount, coverage}` | `.data.missing` |
+| `sync` | `{jobs, downloaded, skipped, rows, byType, failed, dataDir, note}` | `.data.downloaded` |
 | `archive` | `{dataDir, reportTypes, totalRows, ingestedReports}` | `.data.reportTypes` |
 | `fetch` | `{period, warnings, notes, data}` | `.data.data.<dataset>` |
 

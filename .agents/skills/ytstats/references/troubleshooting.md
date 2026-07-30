@@ -103,6 +103,8 @@ Reports YouTube has generated but nobody downloaded expire in 60 days (30 for ba
 
 The query succeeded with a reduced metric set because this channel cannot serve one of the newer metrics — most often `relativeRetentionPerformance`, sometimes `engagedViews`. `context.dropped` names them.
 
+Every analytics command raises this when it drops something — the dataset commands, `retention`, and `fetch` (where it appears in `data.notes`). So a null column always has a stated reason, and "no warning" genuinely means nothing was dropped.
+
 The rows are correct; they carry fewer fields. **Report the dropped fields as unknown.** Saying "your relative retention is 0" when the metric was never returned is a confidently false answer, and it is the failure this diagnostic exists to prevent. Nothing needs fixing.
 
 ## When you do not know what is wrong

@@ -1,6 +1,6 @@
 {
 	"name": "ytstats",
-	"version": "0.7.0",
+	"version": "0.7.1",
 	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, manage sign-in, switch channels, diagnose failures. Covers 26 commands, the JSON envelope, and interpretation traps.",
 	"type": "skill",
 	"authors": ["Nicolas Dao <nicolas.dao@gmail.com>"],
@@ -9,8 +9,8 @@
 	"dependencies": {},
 	"systemDependencies": {
 		"ytstats": {
-			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.6.0 or newer is required — it adds the reports/reports-enable/sync/archive commands and the doctor reporting_jobs and reports_archived checks that this skill instructs agents to raise unprompted, plus the retention drop-off metrics and engagedViews. On 0.5.0 those commands do not exist, so the skill's guidance would name fixes the user cannot run.",
-			"version": ">=0.6.0",
+			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.6.1 or newer is required. 0.6.0 added the reports/reports-enable/sync/archive commands and the reporting_jobs and reports_archived doctor checks this skill raises unprompted, but on 0.6.0 the seven dataset commands drop an unavailable metric without warning — so this skill's rule that a null column always has a stated reason is false there, and an agent would report a missing metric as a zero.",
+			"version": ">=0.6.1",
 			"check": "npx --yes ytstats --version",
 			"install": {
 				"darwin": "npm install -g ytstats",

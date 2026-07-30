@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.1] - 2026-07-30
+
+### Changed
+- Require `ytstats` 0.6.1 or newer. On 0.6.0 the seven dataset commands (`daily`, `traffic`, `devices`, `content-types`, `geography`, `playback-locations`, `video-analytics`) dropped an unavailable metric **without emitting any warning**, so this skill's rule that a null column always has a stated reason was false there — an agent following it would report a metric YouTube never returned as a zero. Same reasoning as the v0.2.1 floor raise for silently-empty CTR: the guidance only becomes true at the fixed version.
+- State the dropped-metric rule generally rather than only under retention, now that every analytics command raises `ANALYTICS_METRICS_UNSUPPORTED`. Added to the dataset-command section of `references/commands.md` and the diagnostic entry in `references/troubleshooting.md`.
+
+### Fixed
+- Completed two `.data` shape entries: `reports` also returns `jobCount`, and `sync` also returns `note` (which carries the expiry-cadence advice an agent should relay).
+
 ## [0.7.0] - 2026-07-29
 
 ### Added
