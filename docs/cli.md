@@ -18,7 +18,7 @@ ytstats [global flags] <command> [command flags]
 
 Installed globally, or run without installing via `npx ytstats <command>`.
 
-Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 22 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
+Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 26 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
 
 ## Global flags
 
@@ -129,7 +129,7 @@ ytstats status 2>/dev/null | jq -r '.data.accounts[] | select(.isDefault) | .cha
 ytstats doctor
 ```
 
-Runs seven independent readiness checks, cheapest first, and reports all of them rather than stopping at the first failure. Together they cover the whole setup walkthrough, so `doctor` is the one call that answers "what is still missing".
+Runs nine independent readiness checks, cheapest first, and reports all of them rather than stopping at the first failure. Together they cover the whole setup walkthrough, so `doctor` is the one call that answers "what is still missing".
 
 | Check id | What it proves |
 |---|---|
@@ -139,11 +139,17 @@ Runs seven independent readiness checks, cheapest first, and reports all of them
 | `api_reachable` | A live `channels.list` succeeds — the **Data API v3** is enabled |
 | `api_analytics` | A one-day `reports.query` succeeds — the **Analytics API v2** is enabled |
 | `api_reporting` | `jobs.list` succeeds — the **Reporting API v1** is enabled |
+| `reporting_jobs` | Every schedulable report type has a job — see below, this is the one that reports a *loss* |
+| `reports_archived` | No generated report is within 14 days of expiring un-downloaded |
 | `consent_screen` | Published to Production — see below, this one is usually `unknown` |
 
 The three APIs are enabled **independently** in Google Cloud, so each gets its own probe. Reaching only the Data API and reporting healthy would be worse than not checking: setup looks complete, then the first `daily` or `reach` fails with `API_NOT_ENABLED` and nothing points at the missing API. All three are skipped when earlier checks failed, since they cannot succeed.
 
 Every check carries a `status` of `pass`, `fail`, or `unknown` alongside its boolean `ok`.
+
+**`reporting_jobs` and `reports_archived` are two halves of one problem.** A job makes YouTube *generate* a report; it does nothing to stop that report expiring 60 days later. A channel can have perfect job coverage and still lose everything because nothing ever downloaded it. `reports_archived` fails when an un-downloaded report is within 14 days of expiry — fix with `ytstats sync`.
+
+**`reporting_jobs` is the only check that reports something already lost.** The other seven report a blockage — something is not working and can be fixed. This one reports that data was never collected. The Reporting API generates nothing for a report type until a job exists, and creating one later backfills only 30 days, so a channel can look completely healthy while months of history quietly fail to exist. It fails rather than warns for that reason: a warning that costs a month of data per month ignored is mis-graded. Fix it with `ytstats reports-enable --all`.
 
 **`consent_screen` is the honest gap.** No Google API exposes whether the consent screen is published, and it is the one setup step whose failure is *delayed* — in Testing, Google expires refresh tokens after 7 days. It is reported as `status: "unknown"` with the console URL rather than omitted, so `healthy: true` never implies a prerequisite nobody looked at. An `unknown` never counts against `healthy`: "we could not look" is not "we found a problem".
 
@@ -247,9 +253,22 @@ ytstats videos --type SHORTS --sort viewCount | jq '.data[0:5]'
 ytstats retention <videoId> [--days 90] [--start <date>] [--end <date>]
 ```
 
-Audience retention curve for one video — roughly 100 points at 1% intervals. Returns `{ videoId, period, curve }`, where each point is `{ position, ratio }`.
+Audience retention curve for one video — roughly 100 points at 1% intervals. Returns `{ videoId, period, curve }`, where each point is:
+
+| Field | Meaning |
+|---|---|
+| `position` | Elapsed fraction of the video, `0`–`1` |
+| `ratio` | `audienceWatchRatio` — how many viewers are still watching here |
+| `stoppedWatching` | How often viewers **left** during this segment |
+| `startedWatching` | How often viewers **joined** here, i.e. skipped ahead to it |
+| `totalSegmentImpressions` | The denominator, for turning ratios back into counts |
+| `relativeRetentionPerformance` | How this curve compares to similar YouTube videos |
 
 Ratios above `1.0` are correct and never clamped: a Short showing `1.54` means viewers looped it.
+
+The last four are the ones that explain a dip. A trough with high `stoppedWatching` is content losing people; the same trough preceded by high `startedWatching` is viewers skipping an intro. Those need opposite edits, and `ratio` alone cannot distinguish them.
+
+Any of the four may be `null` if this channel cannot serve it — `relativeRetentionPerformance` needs a peer set and is the most often missing. When that happens the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly what was dropped. **A `null` here means unknown, never zero.**
 
 ## reach
 
@@ -265,6 +284,64 @@ Returns `{ job, reportCount, pending, rows[] }`, plus `message` when pending. A 
 Rows carry `date`, `channelId`, `videoId`, `impressions`, and `impressionsCtr`. **`impressionsCtr` is a decimal fraction, not a percentage**: `0.0561` means 5.61%.
 
 `reach-jobs` lists the Reporting API jobs on the channel.
+
+## reports
+
+```bash
+ytstats reports
+ytstats reports-enable --all
+ytstats reports-enable --type channel_combined_a3 --type channel_end_screens_a2
+```
+
+The Reporting API generates a report only once a job exists for it. A report type with no job produces **nothing**, silently — and creating a job later backfills 30 days and no more. These two commands make that gap visible and closable.
+
+`reports` returns the audit:
+
+| Field | Meaning |
+|---|---|
+| `available` | Report types this channel may schedule, from a live `reportTypes.list` |
+| `active` | Those with a job — currently collecting |
+| `missing` | Those with no job — **collecting nothing right now** |
+| `jobs` | The raw job list: `id`, `reportTypeId`, `name`, `createTime` |
+| `coverage` | `active / available`, as a fraction |
+
+A non-empty `missing` raises a `REPORTING_JOBS_MISSING` warning.
+
+`reports-enable` creates the jobs and returns `{ created, skipped, failed, requested, note }`. It requires `--all` or at least one `--type`, validated before authentication. One report type this channel cannot schedule does not stop the others — it lands in `failed` with its reason while the rest are created.
+
+Two things to know after running it:
+
+- First reports arrive **24-48 hours** later, with a 30-day backfill. An immediate re-run showing nothing is expected.
+- Reports **expire**: 60 days after generation, 30 days for backfill reports. Creating jobs starts collection; it does not preserve anything on its own. Pull on a cadence shorter than 60 days and keep the output.
+
+```bash
+ytstats reports 2>/dev/null | jq -r '.data.missing[].id'
+ytstats reports-enable --all 2>/dev/null | jq '.data.created | length'
+```
+
+## sync and archive
+
+```bash
+ytstats sync
+ytstats archive
+```
+
+**Creating jobs starts collection; `sync` is what preserves it.** Reports expire off Google's servers 60 days after generation (30 days for backfill reports), so the Reporting API is a delivery mechanism with expiring artifacts rather than an archive. `sync` downloads every report not yet stored into a local append-only archive.
+
+Idempotent by report id — running it on a schedule is safe and cheap, and an already-archived report is skipped without a download. Run it **more often than every 60 days**; monthly is comfortable, weekly is safer.
+
+`sync` returns `{ jobs, downloaded, skipped, rows, byType, failed, dataDir, note }`. A report that fails to download is **not** marked ingested, so the next run retries it rather than leaving a permanent hole. Progress is persisted even when a run aborts partway.
+
+`archive` needs no authentication — it reads local files — and returns `{ dataDir, reportTypes[], totalRows, ingestedReports }`, with `rows`, `firstDate`, `lastDate` and `bytes` per report type.
+
+Storage is NDJSON, one file per report type, under `<config dir>/data/reports/` or `YTSTATS_DATA_DIR`. Rows carry `_reportId`, `_jobId` and `_createTime` provenance. Reads dedupe last-wins by the row's dimension columns, resolving by `_createTime` rather than file order — overlapping reports carry corrected figures for days already reported, and file order is not guaranteed to match report order.
+
+```bash
+ytstats sync 2>/dev/null | jq '{downloaded: .data.downloaded, rows: .data.rows}'
+ytstats archive 2>/dev/null | jq -r '.data.reportTypes[] | "\(.reportTypeId): \(.rows) rows \(.firstDate)..\(.lastDate)"'
+```
+
+**The archive is the only copy of anything older than 60 days.** Back it up.
 
 ## query
 

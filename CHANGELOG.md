@@ -6,6 +6,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ytstats reports` and `ytstats reports-enable` — audit and close the Reporting
+  API job gap. The API generates a report **only once a job exists for it**, so a
+  report type with no job produces nothing at all, silently, while every command
+  keeps returning `ok: true`. Creating a job later backfills 30 days and no more,
+  which makes this the one failure in `ytstats` whose cost is unbounded and
+  unrecoverable. Until now exactly one job was ever created
+  (`channel_reach_basic_a1`), and only when `reach` was first run — every other
+  report type had been collecting nothing since the tool was written.
+- `doctor` gained a `reporting_jobs` check that **fails** rather than warns when
+  report types are uncovered. It is the only check that reports something already
+  lost rather than something blocked; a warning that costs a month of history per
+  month ignored is mis-graded.
+- Report types are discovered live via `reportTypes.list` rather than hardcoded.
+  Google version-bumps report ids in place (`channel_basic_a2` → `a3`) and its own
+  two listing pages currently disagree about the set, so a constant would rot
+  silently. Uses `yt-analytics.readonly`, already requested — no new consent.
+- Audience retention now returns `stoppedWatching`, `startedWatching`,
+  `totalSegmentImpressions` and `relativeRetentionPerformance` alongside `ratio`.
+  `audienceWatchRatio` alone cannot distinguish viewers *leaving* at a point from
+  viewers *skipping ahead* to it — those call for opposite edits.
+- `engagedViews` is requested alongside `views` on the seven fetchers that allow
+  it. YouTube redefined `views` on 2025-04-30 (a Shorts view is now every play or
+  replay, no minimum watch time); `engagedViews` preserves the prior definition,
+  so comparisons spanning that date no longer silently overstate Shorts.
+- `ytstats sync` and `ytstats archive` — a durable local store for Reporting API
+  output. Creating jobs makes YouTube *generate* reports; it does nothing to stop
+  them expiring **60 days after generation** (30 days for backfill reports). Full
+  job coverage plus an infrequent pull therefore still loses history, silently.
+  Confirmed live during development: the first sync of a long-running reach job
+  returned rows starting exactly ~60 days back — everything earlier had already
+  been deleted by Google. Storage is append-only NDJSON per report type under
+  `<config dir>/data` or `YTSTATS_DATA_DIR`, deduped last-wins on replay.
+- `doctor` gained a `reports_archived` check, failing when a generated report is
+  within 14 days of expiring un-downloaded. `reporting_jobs` and this are two
+  halves of one problem: the first catches data never generated, the second data
+  generated and never collected.
+- `REPORTING_JOBS_MISSING`, `REPORTS_EXPIRING` and `ANALYTICS_METRICS_UNSUPPORTED`
+  diagnostics.
+- `YTSTATS_DATA_DIR` to relocate the archive. It defaults under the config
+  directory so `YTSTATS_CONFIG_DIR` still moves everything for a channel together.
+
+### Changed
+
+- Analytics queries degrade per-metric instead of failing outright. The API
+  rejects the *whole query* when a channel cannot serve one requested metric, so
+  adding any newer metric unconditionally would turn a working dataset into no
+  dataset. Each addition is now a tier that falls back to the set already known to
+  work; only `API_QUERY_NOT_SUPPORTED` triggers a retry, so a 403 is never quietly
+  downgraded into "degraded data". Dropped metrics are reported in `notes` (from
+  `fetch`) or as an `ANALYTICS_METRICS_UNSUPPORTED` warning (from `retention`) —
+  an absent field means unknown, never zero.
+- `reach-jobs` now pages `jobs.list` rather than reading only the first page.
+- A `sync` marks a report ingested only after the append succeeds, so a failed
+  download is retried on the next run rather than skipped forever — the report is
+  gone in 60 days and a retry is the only chance to get it. Progress is persisted
+  even when a run aborts partway.
+
 ## [0.5.0] - 2026-07-29
 
 ### Fixed

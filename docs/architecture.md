@@ -6,6 +6,8 @@ source:
   - src/index.js
   - src/cli.js
   - src/fetch-all.js
+  - src/sync.js
+  - src/archive.js
 ---
 
 # Architecture
@@ -20,6 +22,8 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
        ├─ src/auth/     credentials, OAuth, token store, session
        ├─ src/api/      Data v3, Analytics v2, Reporting v1, pure transforms
        ├─ src/fetch-all.js   one-document orchestrator with per-step degradation
+       ├─ src/sync.js        pulls expiring Reporting API output into the archive
+       ├─ src/archive.js     append-only local store for Reporting API data
        ├─ src/output.js      the envelope; stdout/stderr discipline
        ├─ src/diagnostics.js the failure catalog
        ├─ src/errors.js      YtStatsError, Google error classification, redaction
@@ -31,7 +35,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 ## Design principles
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 341 tests run without a network connection and without opening a browser.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 410 tests run without a network connection and without opening a browser.
 
 **Pure logic is separated from effects.** `api/transforms.js`, `dates.js`, `config/paths.js` and `diagnostics.js` are pure and directly tested. Everything awkward to test is pushed to the edges.
 
@@ -57,6 +61,8 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 | `api/analytics.js` | Analytics API v2 fetchers, with the undocumented limits encoded as constants. |
 | `api/reporting.js` | Reporting API v1 job lifecycle and reach download. |
 | `fetch-all.js` | Orchestrates every dataset into one document, degrading per step. |
+| `archive.js` | Append-only NDJSON store for Reporting API rows, with last-wins replay. Pure filesystem — no network. |
+| `sync.js` | Downloads reports not yet archived. The only module that spans the API and the archive. |
 | `dates.js` | Reporting window resolution and validation. |
 | `output.js` | The envelope and the stdout/stderr split. |
 | `diagnostics.js` | The failure catalog and exit-code derivation. |
@@ -109,7 +115,8 @@ The exported surface, grouped:
 | Credentials | `resolveCredentials`, `saveCredentials`, `clearCredentials`, `loadStoredCredentials`, `discoverClientSecretFile`, `parseClientSecret` |
 | Accounts | `loadAccount`, `listAccounts`, `saveAccount`, `removeAccount`, `setDefaultAccount`, `clearAllAccounts`, `migrateLegacyTokens` |
 | APIs | `createApis`, `data`, `analytics`, `reporting` (namespace exports), plus everything in `api/transforms.js` |
-| Orchestration | `fetchAll` |
+| Orchestration | `fetchAll`, `syncReports`, `findExpiringReports` |
+| Archive | `dataDir`, `resolveDataDir`, `appendRows`, `readRows`, `archiveStatus`, `keyColumns`, `daysUntilExpiry` |
 | Dates | `resolveDateRange`, `daysBetween`, `toIsoDate` |
 | Output | `renderEnvelope`, `createReporter` |
 | Errors | `YtStatsError`, `ERROR_CODES`, `EXIT_CODES`, `mapGoogleError`, `diagnoseGoogleError`, `fail`, `redact` |

@@ -89,25 +89,56 @@ Both are applied with `Math.min`, so a caller cannot exceed them.
 
 | Fetcher | Metrics | Dimensions | Sort | maxResults |
 |---|---|---|---|---|
-| `fetchDailyAnalytics` | `views`, `estimatedMinutesWatched`, `averageViewDuration`, `likes`, `dislikes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `day` | `day` | — |
+| `fetchDailyAnalytics` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `averageViewDuration`, `likes`, `dislikes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `day` | `day` | — |
 | `fetchCardMetrics` | `views`, `annotationClickThroughRate`, `cardClicks`, `cardImpressions` | `day` | `day` | — |
-| `fetchVideoAnalytics` | `views`, `estimatedMinutesWatched`, `averageViewDuration`, `averageViewPercentage`, `likes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `video` | `-views` | ≤ 200 |
-| `fetchTrafficSources` | `views`, `estimatedMinutesWatched` | `insightTrafficSourceType` | `-views` | — |
+| `fetchVideoAnalytics` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `averageViewDuration`, `averageViewPercentage`, `likes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `video` | `-views` | ≤ 200 |
+| `fetchTrafficSources` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `insightTrafficSourceType` | `-views` | — |
 | `fetchDemographics` | `viewerPercentage` | `ageGroup,gender` | — | — |
-| `fetchDeviceTypes` | `views`, `estimatedMinutesWatched` | `deviceType` | `-views` | — |
-| `fetchContentTypes` | `views`, `estimatedMinutesWatched`, `likes`, `shares`, `subscribersGained`, `subscribersLost` | `creatorContentType` | `-views` | — |
+| `fetchDeviceTypes` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `deviceType` | `-views` | — |
+| `fetchContentTypes` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `likes`, `shares`, `subscribersGained`, `subscribersLost` | `creatorContentType` | `-views` | — |
 | `fetchSearchTerms` | `views` | `insightTrafficSourceDetail` | `-views` | ≤ 25 |
-| `fetchGeography` | `views`, `estimatedMinutesWatched`, `subscribersGained`, `subscribersLost` | `country` | `-views` | 50 |
-| `fetchPlaybackLocations` | `views`, `estimatedMinutesWatched` | `insightPlaybackLocationType` | `-views` | — |
+| `fetchGeography` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `subscribersGained`, `subscribersLost` | `country` | `-views` | 50 |
+| `fetchPlaybackLocations` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `insightPlaybackLocationType` | `-views` | — |
 | `fetchTrafficSourceDetails` | `views` | `insightTrafficSourceDetail` | `-views` | ≤ 25 |
-| `fetchAudienceRetention` | `audienceWatchRatio` | `elapsedVideoTimeRatio` | — | — |
+| `fetchAudienceRetention` | `audienceWatchRatio`, `relativeRetentionPerformance`†, `startedWatching`†, `stoppedWatching`†, `totalSegmentImpressions`† | `elapsedVideoTimeRatio` | — | — |
 | `runCustomReport` | caller-supplied | caller-supplied | caller-supplied | caller-supplied |
+
+† Requested in the first tier and dropped if this channel rejects it — see [Metric tiers](#metric-tiers).
 
 `fetchSearchTerms` filters with `insightTrafficSourceType==YT_SEARCH`; `fetchTrafficSourceDetails` filters on whichever source type it is given. `fetchAudienceRetention` filters `video==<videoId>`.
 
 The `views`-only metric lists on the two detail fetchers are not an oversight: adding `estimatedMinutesWatched` to `insightTrafficSourceDetail` triggers an internal server error.
 
 Tests assert the **exact query parameters** each fetcher sends. That is what pins these limits rather than merely documenting them.
+
+### Metric tiers
+
+The Analytics API rejects the **whole query** when a channel cannot serve one requested metric — it does not return a null column. Requesting a newer metric unconditionally would therefore turn a working dataset into no dataset for anyone whose channel lacks it.
+
+`queryTiered()` requests the richest metric set, and on `API_QUERY_NOT_SUPPORTED` retries with the next tier down. The last tier is the historical metric list; its failure propagates untouched. Only `API_QUERY_NOT_SUPPORTED` triggers a retry — a 403 must not be quietly downgraded into "degraded data".
+
+Retention has three tiers rather than two, so a channel with no peer-comparison data loses only `relativeRetentionPerformance` and keeps the drop-off counts:
+
+```
+audienceWatchRatio,relativeRetentionPerformance,startedWatching,stoppedWatching,totalSegmentImpressions
+audienceWatchRatio,startedWatching,stoppedWatching,totalSegmentImpressions
+audienceWatchRatio
+```
+
+Whatever was dropped is reported: `notes` in `fetchAll`, an `ANALYTICS_METRICS_UNSUPPORTED` warning on `ytstats retention`. Absent fields mean **unknown**, never zero.
+
+### Reading retention
+
+`audienceWatchRatio` says how many viewers remain at a point. It cannot say *why* a dip happened — the four added metrics can:
+
+| Metric | Answers |
+|---|---|
+| `stoppedWatching` | How often viewers left during this segment — the literal drop-off |
+| `startedWatching` | How often viewers joined here, i.e. skipped ahead to it |
+| `totalSegmentImpressions` | The denominator, so the ratios can be turned back into counts |
+| `relativeRetentionPerformance` | How this curve compares to similar YouTube videos, not to itself |
+
+A dip with high `stoppedWatching` is content losing people; the same dip with high `startedWatching` upstream is viewers skipping an intro. Those call for opposite edits, and `audienceWatchRatio` alone cannot tell them apart.
 
 ### Notable omission
 
@@ -123,13 +154,24 @@ The escape hatch behind `ytstats query`. Returns `{ columns, rows }`, where `col
 
 ## Reporting API v1
 
-The only source of thumbnail impressions and CTR, and asynchronous by design. `src/api/reporting.js` uses one report type:
+The only source of thumbnail impressions and CTR, and asynchronous by design.
 
-```js
-export const REACH_REPORT_TYPE = 'channel_reach_basic_a1';
-```
+**This API only generates a report once a job exists for it.** No job means no data — not withheld data, ungenerated data — and creating a job later backfills 30 days and nothing more. Reports then expire 60 days after generation (30 for backfill reports), so a job nobody downloads from also loses history. Both halves matter; see [the gotcha](gotchas/youtube-api.md#a-reporting-api-report-type-with-no-job-collects-nothing-forever).
 
-The lifecycle:
+### Job coverage
+
+| Function | Purpose |
+|---|---|
+| `listReportTypes(apis)` | What this channel may schedule, from `reportTypes.list`. Discovered live — ids are version-bumped in place and Google's own doc pages disagree, so a constant would rot. Needs only `yt-analytics.readonly`, already requested. |
+| `listJobs(apis)` | Every scheduled job, paged. Exported as `listReachJobs` too, which is the published name. |
+| `auditReportingJobs(apis)` | `{ available, active, missing, coverage, jobs, jobCount }` — the comparison that makes the gap visible |
+| `ensureJobs(apis, ids)` | Creates jobs for ids with none. One rejected type does not abort the rest: `{ created, skipped, failed }` |
+
+Deprecated (`deprecateTime`) and `systemManaged` types are excluded from `available` — `jobs.create` rejects both.
+
+Surfaced as `ytstats reports` / `ytstats reports-enable`, and as the `reporting_jobs` check in `doctor`, which **fails** rather than warns because the loss compounds every day it goes unnoticed.
+
+### The reach lifecycle
 
 1. **`ensureReachJob()`** lists jobs and returns the existing one with a matching `reportTypeId`, creating it only if absent. Safe to call on every run — it never creates a duplicate.
 2. **`listReports()`** pages `jobs.reports.list` for that job.

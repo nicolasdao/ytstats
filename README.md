@@ -143,8 +143,12 @@ ytstats search-terms                  # what people search to find you
 ytstats geography [-n 50]
 ytstats playback-locations
 ytstats video-analytics               # per-video, top 200 by views
-ytstats retention <videoId>           # where viewers drop off
+ytstats retention <videoId>           # where viewers drop off, and whether they left or skipped
 ytstats reach                         # thumbnail impressions and CTR
+ytstats reports                       # which report types are collecting — and which are not
+ytstats reports-enable --all          # start collecting the ones that are not
+ytstats sync                          # archive reports locally before they expire
+ytstats archive                       # what the local archive holds
 ytstats query -m views,likes --dimensions day
 
 ytstats login | logout | status | doctor | use <channel> | import-legacy <file>
@@ -205,7 +209,7 @@ Library callers get no envelope: `fetchAll` returns its result object directly a
 
 ## Drive it from an AI agent
 
-There is a published agent skill that operates **the entire CLI** — all 22 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
+There is a published agent skill that operates **the entire CLI** — all 26 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
 
 ```
 nicolasdao/ytstats@0.1.0        install with HappySkills
@@ -230,6 +234,14 @@ Requires `ytstats` **0.2.0 or newer** — it reads the `clientId` field on `stat
 The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own `SKILL.md` and `references/` are its full documentation.
 
 ## Things worth knowing
+
+**Run `ytstats reports-enable --all` on day one.** The Reporting API generates a report only once you create a job for it — no job means the data is never produced, not merely withheld. Creating a job later backfills **30 days and no more**, so every day without one is a day of that report permanently gone. Nothing fails while this is happening: every command returns `ok: true`. `ytstats doctor` now fails the `reporting_jobs` check when types are uncovered, and `ytstats reports` names them.
+
+**Creating the jobs is half of it — reports also expire.** 60 days after generation, 30 days for backfill reports. A job nobody downloads from still loses history. `ytstats sync` archives them locally; run it on a schedule shorter than 60 days. The archive is the only copy of anything older than that, so point `YTSTATS_DATA_DIR` somewhere you back up.
+
+**`views` changed meaning on 30 April 2025.** A Shorts view is now every play or replay with no minimum watch time. `engagedViews` carries the old definition, and `ytstats` requests both wherever the API allows — so a Shorts-vs-long-form comparison spanning that date doesn't silently overstate Shorts.
+
+**Retention says more than one number.** `stoppedWatching` is viewers leaving; `startedWatching` is viewers skipping ahead to that point. A dip means opposite things depending on which one moved, and `ratio` alone cannot tell them apart. `relativeRetentionPerformance` compares the curve to similar YouTube videos rather than to itself.
 
 **CTR only comes from `ytstats reach`.** The Analytics API documents `videoThumbnailImpressions` but it has never worked ([issue 254665034](https://issuetracker.google.com/issues/254665034)). CTR is served asynchronously by the Reporting API instead: the first `reach` run only creates a job, and data appears **24-48 hours later** with a 30-day backfill. It's also permanently 1-2 days behind — the same lag YouTube Studio shows.
 
@@ -260,11 +272,13 @@ src/
   api/               Data v3, Analytics v2, Reporting v1, pure transforms
   config/            per-user config dir, atomic 0600 store
   fetch-all.js       one-document orchestrator with per-step degradation
+  sync.js            pulls expiring Reporting API output into the archive
+  archive.js         append-only local store for Reporting API data
   output.js          the envelope; stdout/stderr discipline
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                341 tests, none requiring network access
+test/                410 tests, none requiring network access
 docs/                topic documentation, indexed below
 .agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```

@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-341 tests across 13 files. **None of them requires network access**, and none opens a browser.
+410 tests across 14 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 

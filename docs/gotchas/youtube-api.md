@@ -3,6 +3,8 @@ description: Non-obvious behaviour of the three YouTube APIs — metrics that ne
 tags: [youtube-api, analytics, reporting, quota, gotchas]
 source:
   - src/api/**
+  - src/sync.js
+  - src/archive.js
 ---
 
 # YouTube API Gotchas
@@ -33,6 +35,59 @@ This surfaces as the `REACH_PENDING` **warning**, not an error — the command s
 
 **Where handled:** `fetchReach()` and `ensureReachJob()` in `src/api/reporting.js`.
 
+## A Reporting API report type with no job collects nothing, forever
+
+The single most expensive thing to learn late. Google's wording:
+
+> "YouTube does not begin to generate your report until you create a reporting job for that report."
+
+Not "does not serve" — **does not generate**. A report type with no job produces no data at all, and the API says nothing about it: `jobs.list` succeeds, `reach` succeeds, every query returns `ok: true`. The absence is indistinguishable from a channel that had no activity.
+
+Creating a job later backfills **30 days and no more**. Everything older never existed and cannot be bought back at any price, by any API, by contacting Google, or by upgrading. This is the only failure in `ytstats` where the cost of noticing late is unbounded and unrecoverable.
+
+Creating the job is also only half of it. Reports **expire off Google's servers**: 60 days after generation for normal reports, 30 days for the backfill ones. A job created and then never collected from still loses data — it just loses it more slowly. A durable local sink and a pull cadence under 60 days is the only configuration that actually retains history.
+
+`ytstats` created exactly one job (`channel_reach_basic_a1`) until 0.6.0, and only when `reach` was first run. Every other report type had been collecting nothing since the tool was written.
+
+**Where handled:** `auditReportingJobs()` and `ensureJobs()` in `src/api/reporting.js`; the `reporting_jobs` check in `doctor` (`src/cli.js`), which **fails** rather than warns precisely because the loss compounds daily; the `REPORTING_JOBS_MISSING` diagnostic.
+
+## Reports expire, so a job nobody collects from still loses data
+
+The second half of the trap above, and the one that looks solved when it is not. Creating a job makes YouTube *generate* reports. It does nothing to keep them:
+
+| Report kind | Available for |
+|---|---|
+| Normal | **60 days** from generation |
+| Historical / backfill | **30 days** from generation |
+
+So full job coverage plus an infrequent pull still loses history, in silence. A channel synced twice a year keeps two 60-day windows and nothing else, and no API call reports the hole — the rows simply are not there.
+
+This was confirmed live while building the feature: a first `sync` of a reach job running since the tool was written returned rows starting **2026-05-29**, exactly ~60 days before the sync date. Everything earlier had already been deleted by Google and is unrecoverable.
+
+The Analytics API needs no equivalent handling. It is a *query* API over YouTube's own long-lived store — any range, any time. Only the Reporting API is ephemeral, which is why only its output is archived.
+
+**Where handled:** `src/archive.js` (append-only NDJSON, last-wins replay), `src/sync.js` (`syncReports`, `findExpiringReports`), the `reports_archived` check in `doctor`, and the `REPORTS_EXPIRING` diagnostic. Never make `sync` mark a report ingested before the append succeeds — the report is gone in 60 days and a retry is the only chance to get it.
+
+## Last-wins in the archive must resolve by createTime, not file order
+
+Overlapping reports carry corrected figures for days already reported, so the archive dedupes on the row's dimension columns and keeps the newest. The tempting implementation — "later line in the file wins" — is wrong: a re-ingest, a restored backup, or two processes appending can all put an older report's rows after a newer report's, silently overwriting a correction with the figure it corrected.
+
+Every archived row therefore carries `_createTime`, and replay ranks on that, falling back to file order only to break ties.
+
+The related trap is knowing what "the same row" *is*. The CSV header does not say which columns are dimensions and which are metrics, and merging on too few columns collapses distinct rows into one — the same silent loss this module exists to prevent. `keyColumns()` treats a column as a dimension if it is a known dimension name, ends in `_id`, or holds any non-numeric value anywhere in the file. `date` has to be in the known list explicitly: it arrives as `20260328.0`, which every numeric heuristic reads as a metric.
+
+**Where handled:** `keyColumns()` and `readRows()` in `src/archive.js`, both pinned by tests.
+
+## Report type ids are version-bumped in place, so never hardcode them
+
+Google revises report types by incrementing a suffix — `channel_basic_a2` became `channel_basic_a3`, `channel_cards_a1` became `channel_cards_a2` — and retires the old id. Worse, Google's own two listing pages currently disagree about the set: [full_report_list](https://developers.google.com/youtube/reporting/v1/reports/full_report_list) omits `channel_province_a3` and `channel_sharing_service_a2`, which [channel_reports](https://developers.google.com/youtube/reporting/v1/reports/channel_reports) lists.
+
+A hardcoded array therefore rots silently and starts creating jobs for ids that no longer exist. `reportTypes.list` returns exactly what *this* channel may schedule, and it needs only `yt-analytics.readonly` — a scope `ytstats` already requests, so live discovery costs no extra consent.
+
+Filter out `deprecateTime` and `systemManaged` entries: `jobs.create` rejects both.
+
+**Where handled:** `listReportTypes()` in `src/api/reporting.js`. Do not replace it with a constant.
+
 ## Reach reports overlap, so rows must be deduped
 
 Successive report files cover overlapping periods, and later files carry corrected figures for days already reported. Concatenating rows produces duplicates and stale numbers.
@@ -56,6 +111,31 @@ The `insightTrafficSourceDetail` dimension has three distinct traps:
 3. Combining it with `estimatedMinutesWatched` also triggers an internal error. Only `views` is reliable.
 
 **Where handled:** `MAX_DETAIL_ROWS` and the hard-coded `metrics: 'views'` in `fetchSearchTerms()` and `fetchTrafficSourceDetails()`, `src/api/analytics.js`. Tests assert all three.
+
+## `views` changed meaning on 30 April 2025
+
+YouTube redefined the metric rather than adding a new one. A Shorts view is now **every play or replay, with no minimum watch time**; it previously required a watch-time threshold. `engagedViews` was introduced to carry the old definition forward.
+
+The trap is that nothing fails. A channel's `views` series has a step change in April 2025 that no content decision caused, and long-form is unaffected — so any Shorts-vs-long-form comparison spanning that date overstates Shorts. Reading `views` alone, you would conclude a format change worked.
+
+`ytstats` requests both wherever the API allows, so a consumer can compare like with like across the boundary. Neither metric alone is sufficient: `views` is what YouTube reports today, `engagedViews` is what makes today comparable to last year.
+
+**Where handled:** the metric tiers in `src/api/analytics.js`. `engagedViews` is deliberately **absent** from `fetchSearchTerms` and `fetchTrafficSourceDetails` — `insightTrafficSourceDetail` tolerates only `views`, per the trap above. A test asserts both the presence and that absence.
+
+## An unsupported metric fails the whole query, not just its column
+
+The Analytics API does not return a null column for a metric a channel cannot serve — it rejects the entire request with `The query is not supported.` So adding any newer metric (`engagedViews`, `relativeRetentionPerformance`) unconditionally converts a working dataset into **no** dataset for every channel that lacks it.
+
+Which metrics a channel supports genuinely varies, so this cannot be settled by testing one channel. Every metric addition is therefore a *tier*: request the richest set, and on `API_QUERY_NOT_SUPPORTED` retry with the set already known to work. The last tier is the historical metric list, and its failure is a real error that propagates untouched.
+
+Two things this must not do, both of which a naive retry gets wrong:
+
+1. **Retry on any error.** A 403 or a network failure would be silently downgraded into "degraded data" when it is actually an auth problem. Only `API_QUERY_NOT_SUPPORTED` triggers a fallback.
+2. **Fall straight to the minimum.** Retention drops `relativeRetentionPerformance` (the metric needing a peer set, most often unavailable) *before* it drops the drop-off counts, so one missing benchmark does not cost `stoppedWatching` too.
+
+Degradation is reported — `notes` in `fetch`, an `ANALYTICS_METRICS_UNSUPPORTED` warning on `retention`. A null column with no explanation is the failure shape this project has already paid for once.
+
+**Where handled:** `queryTiered()` and `isUnsupported()` in `src/api/analytics.js`; the `degraded` map in `src/fetch-all.js`.
 
 ## Retention ratios legitimately exceed 1.0
 

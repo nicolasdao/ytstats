@@ -163,6 +163,9 @@ ytstats fetch 2>/dev/null | jq -r 'if .ok then "fine" else .nextSteps[0] end'
 | `DATA_PARTIAL` | warning | 0 | Some datasets failed while others succeeded — empty means "not fetched", not "zero" |
 | `DATA_EMPTY` | warning | 0 | Query succeeded and returned zero rows — genuinely no data |
 | `REACH_PENDING` | warning | 0 | Reporting job created; YouTube has not generated reports yet |
+| `REPORTING_JOBS_MISSING` | warning | 0 | Report types have no job, so YouTube is generating nothing for them. Only a 30-day backfill is recoverable |
+| `REPORTS_EXPIRING` | warning | 0 | Generated reports are within 14 days of expiring and have never been downloaded. Run `ytstats sync` |
+| `ANALYTICS_METRICS_UNSUPPORTED` | warning | 0 | A metric this channel cannot serve was dropped; the rows are correct but carry fewer fields. `context.dropped` names them |
 | `CONFIG_UNWRITABLE` | error | 1 | Config directory not writable, so authentication cannot persist |
 | `UNEXPECTED` | error | 1 | Unrecognised condition. A bug worth reporting |
 

@@ -4,6 +4,7 @@ tags: [configuration, environment, config-directory, ci]
 source:
   - src/config/**
   - src/auth/credentials.js
+  - src/archive.js
 ---
 
 # Configuration
@@ -15,6 +16,7 @@ source:
 | Variable | Read by | Effect |
 |---|---|---|
 | `YTSTATS_CONFIG_DIR` | `resolveConfigDir()` | Overrides the config directory entirely. Relative values are resolved to absolute against the working directory |
+| `YTSTATS_DATA_DIR` | `resolveDataDir()` | Overrides where the report archive is stored. Defaults to `<config dir>/data`, so `YTSTATS_CONFIG_DIR` moves credentials, tokens **and** archive together. Relative values are resolved to absolute |
 | `YTSTATS_CLIENT_ID` | `resolveCredentials()` | OAuth client id. **Both** this and the secret must be set for the pair to be used |
 | `YTSTATS_CLIENT_SECRET` | `resolveCredentials()` | OAuth client secret |
 | `YTSTATS_CREDENTIALS_FILE` | `resolveCredentials()` | Path to the `client_secret` JSON Google issued. Same effect as `--client-secret`, without repeating the flag |
@@ -23,6 +25,8 @@ source:
 | `HTTPS_PROXY` | `googleapis` / Node | Standard proxy variable, named in the `NETWORK_UNREACHABLE` remediation |
 
 Note the deliberate asymmetry: a relative `XDG_CONFIG_HOME` is ignored because the spec says so, while a relative `YTSTATS_CONFIG_DIR` is accepted and resolved — it is an explicit override, not an environment convention.
+
+**Point `YTSTATS_DATA_DIR` somewhere you back up.** The archive under it is the only copy of any Reporting API data older than 60 days — Google deletes reports 60 days after generating them (30 days for backfill reports). Everything else `ytstats` stores can be recreated by logging in again; this cannot be recreated at all.
 
 ## The config directory
 

@@ -38,7 +38,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 294,
+      "line_count": 308,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -77,7 +77,7 @@
         "Programmatic API",
         "Two error vocabularies"
       ],
-      "line_count": 128,
+      "line_count": 135,
       "links_to": [
         "docs/cli.md",
         "docs/contributing.md",
@@ -91,7 +91,9 @@
         "bin/ytstats.js",
         "src/index.js",
         "src/cli.js",
-        "src/fetch-all.js"
+        "src/fetch-all.js",
+        "src/sync.js",
+        "src/archive.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -179,10 +181,12 @@
         "videos",
         "retention",
         "reach",
+        "reports",
+        "sync and archive",
         "query",
         "Exit codes"
       ],
-      "line_count": 309,
+      "line_count": 386,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -228,7 +232,7 @@
         "Running several OAuth clients side by side",
         "Not committing credentials"
       ],
-      "line_count": 164,
+      "line_count": 168,
       "links_to": [
         "docs/auth.md",
         "docs/gotchas/config-storage.md",
@@ -239,7 +243,8 @@
       "path": "docs/configuration.md",
       "source": [
         "src/config/**",
-        "src/auth/credentials.js"
+        "src/auth/credentials.js",
+        "src/archive.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -488,9 +493,15 @@
         "CTR and impressions do not work on the Analytics API",
         "Reporting API data is always 1-2 days behind",
         "The first reach run returns nothing for 24-48 hours",
+        "A Reporting API report type with no job collects nothing, forever",
+        "Reports expire, so a job nobody collects from still loses data",
+        "Last-wins in the archive must resolve by createTime, not file order",
+        "Report type ids are version-bumped in place, so never hardcode them",
         "Reach reports overlap, so rows must be deduped",
         "Per-video analytics rejects maxResults above 200",
         "Traffic source detail queries are fragile in three separate ways",
+        "`views` changed meaning on 30 April 2025",
+        "An unsupported metric fails the whole query, not just its column",
         "Retention ratios legitimately exceed 1.0",
         "Two content-type vocabularies disagree",
         "Subscriber counts are rounded",
@@ -502,7 +513,7 @@
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 158,
+      "line_count": 238,
       "links_to": [
         "docs/gotchas/auth.md",
         "docs/youtube-apis.md"
@@ -511,7 +522,9 @@
       "parse_error": null,
       "path": "docs/gotchas/youtube-api.md",
       "source": [
-        "src/api/**"
+        "src/api/**",
+        "src/sync.js",
+        "src/archive.js"
       ],
       "source_unresolved": [],
       "tags": [
@@ -550,7 +563,7 @@
         "Redaction",
         "Failures are differentiated"
       ],
-      "line_count": 215,
+      "line_count": 218,
       "links_to": [
         "docs/gotchas/cli-output.md"
       ],
@@ -629,15 +642,19 @@
         "Quota costs",
         "Analytics API v2",
         "Fetchers",
+        "Metric tiers",
+        "Reading retention",
         "Notable omission",
         "fetchCardMetrics degrades silently",
         "runCustomReport",
         "Reporting API v1",
+        "Job coverage",
+        "The reach lifecycle",
         "downloadCsv",
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 190,
+      "line_count": 232,
       "links_to": [
         "docs/gotchas/youtube-api.md"
       ],
