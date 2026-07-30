@@ -113,17 +113,47 @@ The date-windowed ones return `{ period, rows }` at `.data`. Two are exceptions:
 |---|---|---|
 | `channel` | Channel metadata and lifetime stats. No period | — |
 | `videos` | Every video with metadata and current counts. No period | see below |
-| `daily` | Day-by-day views, watch time, likes, comments, subscribers | — |
-| `traffic` | Views by traffic source type | — |
-| `demographics` | Viewer age and gender split | — |
-| `devices` | Views by device type | — |
-| `content-types` | Shorts vs long-form vs live, using YouTube's own classification | — |
+| `daily` | Day-by-day views, watch time, likes, comments, subscribers | `--segment` |
+| `traffic` | Views by traffic source type | `--segment` |
+| `demographics` | Viewer age and gender split | `--segment` |
+| `devices` | Views by device type | `--segment` |
+| `content-types` | Shorts vs long-form vs live, using YouTube's own classification | `--segment` |
 | `search-terms` | What people search to find the channel | `-n, --limit` (default 25, capped at 25) |
-| `geography` | Viewers by country | `-n, --limit` (default 50) |
-| `playback-locations` | Shorts feed, watch page, embedded | — |
-| `video-analytics` | Per-video metrics, top 200 by views | — |
+| `geography` | Viewers by country | `-n, --limit` (default 50), `--segment` |
+| `playback-locations` | Shorts feed, watch page, embedded | `--segment` |
+| `video-analytics` | Per-video metrics, top 200 by views | `--segment` |
 
 `channel` returns the channel resource directly, not `{period, rows}`: `id`, `title`, `description`, `customUrl`, `publishedAt`, `country`, `subscriberCount`, `viewCount`, `videoCount`, `uploadsPlaylistId`, `thumbnailUrl`.
+
+### --segment
+
+```bash
+ytstats <command> --segment subscribedStatus
+ytstats <command> --segment youtubeProduct
+```
+
+Partitions an existing dataset by a second dimension rather than producing a new one. Each row gains a column named after the segment: `subscribedStatus` is `SUBSCRIBED` or `UNSUBSCRIBED`; `youtubeProduct` is the surface the view happened on, usually `CORE`.
+
+**Segments divide the total.** Summing them reproduces the unsegmented figure — they are never additional.
+
+**A segment costs metrics.** It restricts which metrics its report may request, and an unsupported metric fails the whole query rather than returning a null column, so the request is narrowed and the loss reported as an `ANALYTICS_METRICS_UNSUPPORTED` warning listing each dropped metric in `.context.dropped`. Those fields are `null`, meaning **unknown, not zero**.
+
+| Segment | Metrics it costs |
+|---|---|
+| `subscribedStatus` | `comments`, `subscribersGained`, `subscribersLost` |
+| `youtubeProduct` | those plus `likes`, `dislikes`, `shares` |
+
+**Support varies by command and by channel.** A refused combination is a real `API_QUERY_NOT_SUPPORTED` (exit 4), not an empty channel, and re-running the same command cannot help.
+
+| Command | `subscribedStatus` | `youtubeProduct` |
+|---|---|---|
+| `daily`, `devices`, `content-types`, `geography` | works | works |
+| `traffic`, `playback-locations`, `demographics` | works | usually refused |
+| `video-analytics` | usually refused | usually refused |
+
+`search-terms` rejects `--segment` with `INPUT_INVALID_CHOICE` (exit 3) before authenticating: it reads the `insightTrafficSourceDetail` dimension, which tolerates only the `views` metric and breaks when a second dimension is added. An unrecognised value fails the same way, with `.context.allowed` listing the accepted set.
+
+Without the flag, rows are exactly as they were before it existed.
 
 ### videos
 

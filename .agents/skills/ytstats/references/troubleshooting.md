@@ -67,7 +67,7 @@ Do not "fix" this by re-running the same command. It is not retryable.
 | `API_NOT_ENABLED` | One of the three YouTube APIs is off in the Google Cloud project. `remediation.docs` links straight to the enable page. **Retryable** once enabled |
 | `API_QUOTA_EXCEEDED` | Daily quota spent. Resets at midnight Pacific. Do not retry in a loop — tell the user when it resets |
 | `API_RATE_LIMITED` | Transient, unlike a daily quota. **Retryable** after a short backoff |
-| `API_QUERY_NOT_SUPPORTED` | YouTube rejected this metric or dimension combination. Which combinations work varies by channel. Not a bug — try a different query or use a purpose-built command |
+| `API_QUERY_NOT_SUPPORTED` | YouTube rejected this metric or dimension combination. Which combinations work varies by channel. Not a bug — try a different query or use a purpose-built command. Also what a refused `--segment` looks like: `video-analytics --segment` and `traffic --segment youtubeProduct` are commonly refused. **Not retryable** — drop the segment rather than re-running |
 | `API_FORBIDDEN` | Authenticated but not permitted to read this resource |
 | `API_NOT_FOUND` | 404 for the requested id — check the video id |
 | `API_UNAVAILABLE` | Google 5xx. Nothing wrong with the request. **Retryable** |
@@ -78,6 +78,8 @@ Do not "fix" this by re-running the same command. It is not retryable.
 `INPUT_INVALID_DATE`, `INPUT_INVALID_RANGE`, `INPUT_INVALID_CHOICE`, `INPUT_INVALID_VALUE`, `INPUT_MISSING_REQUIRED`, `INPUT_UNKNOWN_COMMAND`, `INPUT_UNKNOWN_OPTION`.
 
 All are the caller's fault and all are fixable without touching the user's account. `context.allowed` carries the valid set where one exists. Input is validated **before** authentication and **every** problem is reported at once, so one correction pass fixes everything rather than discovering a second problem after fixing the first.
+
+`INPUT_INVALID_CHOICE` on `--segment` has two distinct causes worth telling apart: an unrecognised dimension, where `context.allowed` lists the accepted set, and `search-terms`, which cannot be segmented at all — there `context.allowed` is empty and `detail` explains that the underlying dimension tolerates only the `views` metric. Neither is worth retrying.
 
 ## A setup that worked before and now does not
 

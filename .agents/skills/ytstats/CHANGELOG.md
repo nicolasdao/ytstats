@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0] - 2026-07-30
+
+### Added
+- Route segmentation requests to `--segment subscribedStatus` / `--segment youtubeProduct` — "subscribers vs non-subscribers", "which YouTube surface". Added to the routing table and the `.data` shapes table in `SKILL.md`, and documented with the full flag reference in `references/commands.md`.
+- A "Segmenting a dataset" section in `SKILL.md` and three rules in `references/interpreting-results.md`, because every way of misreading a segmented result produces a confident wrong number rather than an error:
+  - **Segments partition the total, they never add to it.** Summing them reproduces the unsegmented figure, and the same date appears once per segment value — so a naive sum or row count doubles the channel's traffic.
+  - **A segment drops metrics, and a dropped metric is unknown, not zero.** A segment restricts which metrics its report may request, so `subscribedStatus` costs `comments`/`subscribersGained`/`subscribersLost` and `youtubeProduct` costs those plus `likes`/`dislikes`/`shares`. They return `null` with an `ANALYTICS_METRICS_UNSUPPORTED` warning naming them. Reporting "subscribers left no comments" from a dropped column is a fabrication.
+  - **A refused segment is a rejection, not an empty channel.** Support varies by report and by channel; a refusal is `API_QUERY_NOT_SUPPORTED`, exit 4, `retryable: false`. `search-terms --segment` fails earlier still with `INPUT_INVALID_CHOICE` and cannot be segmented at all.
+- The `SUBSCRIBER` traffic source / `UNSUBSCRIBED` viewer combination, which is correct and reads as a contradiction — the source is the feed, the segment is the viewer.
+- A per-command support matrix, so an agent picks a combination that works instead of discovering a rejection.
+
+### Changed
+- Require `ytstats` 0.8.0 or newer, up from 0.7.1. `--segment` does not exist before it, and on 0.7.x this skill would route a user to a flag the CLI rejects as an unknown option. Same reasoning as every previous floor raise: the guidance only becomes true at the version that ships the behaviour.
+
 ## [0.8.1] - 2026-07-30
 
 ### Changed

@@ -132,6 +132,43 @@ Above 1,000, YouTube rounds to **3 significant figures**. `1,230` may be anythin
 
 `video-analytics` returns the top 200 videos by views. That is an API limit, not a ytstats choice. On a channel with more than 200 videos the tail is simply absent — say so rather than presenting the set as complete.
 
+## Segmented rows partition the total — they never add to it
+
+`--segment subscribedStatus` splits each row of an existing report in two rather than producing extra rows of new activity. Summing every segment for a period **must** reproduce the unsegmented figure:
+
+```bash
+ytstats daily -d 7 --segment subscribedStatus 2>/dev/null \
+  | jq '[.data.rows[] | select(.date == "2026-07-23") | .views] | add'   # 29
+ytstats daily -d 7 2>/dev/null \
+  | jq -r '.data.rows[] | select(.date == "2026-07-23") | .views'        # 29
+```
+
+This is the obvious way to get a wrong answer. Adding a segmented total to an unsegmented one, or reporting "subscribers watched 2 and the channel got 27" as if they were separate audiences totalling 29 on top of 27, doubles the channel's traffic. The same date appears once per segment value, so a naive row count is also doubled — group before summarizing.
+
+Reporting a share is the useful move: "2 of 29 views on 23 July came from subscribers, 7%".
+
+## A segment drops metrics, and a dropped metric is unknown, not zero
+
+Adding a segment restricts which metrics the report may request, so some columns come back `null`. The command says which in an `ANALYTICS_METRICS_UNSUPPORTED` warning:
+
+```bash
+ytstats daily -d 30 --segment subscribedStatus 2>/dev/null \
+  | jq -r '.warnings[] | select(.code == "ANALYTICS_METRICS_UNSUPPORTED") | .context.dropped'
+# comments, subscribersGained, subscribersLost
+```
+
+`subscribedStatus` costs `comments`, `subscribersGained` and `subscribersLost`; `youtubeProduct` costs those plus `likes`, `dislikes` and `shares`. **Never report a dropped metric as zero.** "Subscribers left no comments" is a fabrication when `comments` was never returned — say the segmented view cannot report comments, and offer the unsegmented command if they want that number.
+
+## A refused segment is a rejection, not an empty channel
+
+Segment support varies by report and by channel. `video-analytics --segment subscribedStatus` and `traffic --segment youtubeProduct` are refused on the channels tested, and a refusal arrives as `ok: false` with `API_QUERY_NOT_SUPPORTED` and exit 4 — deliberately not as an empty dataset, which would read as "no activity". It is `retryable: false`: re-running the identical command cannot help. Drop the segment, or use a command that serves it.
+
+`search-terms --segment` fails earlier still, with `INPUT_INVALID_CHOICE` and exit 3, before any network call. That dataset cannot be segmented at all.
+
+## "SUBSCRIBER" traffic from an "UNSUBSCRIBED" viewer is correct
+
+`traffic --segment subscribedStatus` returns rows where `sourceType` is `SUBSCRIBER` and `subscribedStatus` is `UNSUBSCRIBED`. They measure different things: the source is the Subscriptions feed the view came through, the segment is whether *that viewer* subscribes. Someone browsing a feed they are not subscribed to produces exactly this row. Report it as-is rather than treating it as a data error.
+
 ## Empty is not the same as failed, and not the same as absent
 
 Three distinct states, easy to conflate:

@@ -40,6 +40,7 @@ Never parse the prose. `code` is the public contract; the wording is not.
 | Command | `.data` is | Get rows with |
 |---|---|---|
 | `daily`, `traffic`, `demographics`, `devices`, `content-types`, `search-terms`, `geography`, `playback-locations`, `video-analytics` | `{period, rows}` | `.data.rows` |
+| the same, run with `--segment <dim>` | `{period, rows}`, each row **plus a column named after the segment** | `.data.rows[].subscribedStatus` |
 | `videos` | a bare array | `.data` |
 | `channel` | the channel object | `.data.subscriberCount` |
 | `retention` | `{videoId, period, curve}` | `.data.curve` |
@@ -85,6 +86,8 @@ The config directory is handled by the CLI itself — `%APPDATA%\ytstats\` on Wi
 | "which countries" | `geography` |
 | "where do people watch" | `playback-locations` |
 | "best performing videos this period" | `video-analytics` |
+| "subscribers vs non-subscribers", "how do my subscribers behave differently" | any dataset command `--segment subscribedStatus` — read the caveats below |
+| "which YouTube surface", "app vs music vs kids" | any dataset command `--segment youtubeProduct` |
 | "where do viewers drop off", "retention" | `retention <videoId>` |
 | "what did I say at the drop-off", "transcript", "what was said", "subtitles" | `transcript <videoId>` — needs `login --with-captions` |
 | "CTR", "thumbnail performance", "impressions" | `reach` — read the async caveat first |
@@ -118,6 +121,48 @@ Default is 90 days. Translate plain language rather than asking:
 | a named range | `--start YYYY-MM-DD --end YYYY-MM-DD` |
 
 Dates are `YYYY-MM-DD` only and windows are UTC. `channel` and `videos` take no date flags — they are current-state, not period.
+
+## Segmenting a dataset
+
+`--segment subscribedStatus` or `--segment youtubeProduct` splits an existing
+dataset by a second dimension. Every row gains a column named after the segment.
+
+```bash
+ytstats daily -d 30 --segment subscribedStatus 2>/dev/null \
+  | jq -r '.data.rows[] | "\(.date) \(.subscribedStatus) \(.views)"'
+```
+
+Three things to get right before reporting a segmented result:
+
+1. **Segments partition the total — they do not add to it.** Summing every segment
+   for a period reproduces the unsegmented figure. Never present a segment's views
+   as if they were extra views, and never add a segmented total to an unsegmented
+   one.
+2. **A segment drops metrics, and the command says which.** Check for an
+   `ANALYTICS_METRICS_UNSUPPORTED` warning and read `.context.dropped`. Those
+   fields come back `null`, and **`null` means unknown, not zero** — do not report
+   "0 comments from subscribers" when `comments` was dropped.
+   `subscribedStatus` drops `comments`, `subscribersGained`, `subscribersLost`;
+   `youtubeProduct` drops those plus `likes`, `dislikes`, `shares`.
+3. **Not every command accepts every segment**, and it varies by channel. A refused
+   combination fails with `API_QUERY_NOT_SUPPORTED` (exit 4) — that is a real
+   rejection, not an empty channel. Retrying the identical command will not help;
+   drop the segment or pick another command.
+
+| Command | `subscribedStatus` | `youtubeProduct` |
+|---|---|---|
+| `daily`, `devices`, `content-types`, `geography` | works | works |
+| `traffic`, `playback-locations`, `demographics` | works | usually refused |
+| `video-analytics` | usually refused | usually refused |
+| `search-terms` | **rejected by the CLI** | **rejected by the CLI** |
+
+`search-terms --segment` fails immediately with `INPUT_INVALID_CHOICE` (exit 3)
+before any network call — that dataset cannot be segmented at all. Do not retry it.
+
+One value that reads as a contradiction but is correct: `traffic --segment
+subscribedStatus` returns rows like `sourceType: "SUBSCRIBER"` with
+`subscribedStatus: "UNSUBSCRIBED"` — someone who is *not* subscribed arriving via
+the Subscriptions feed. Report it as-is.
 
 ## Pulling everything
 
