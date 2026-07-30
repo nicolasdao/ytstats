@@ -11,18 +11,132 @@ import { parseCsv, normalizeReportingDate } from './transforms.js';
  * It is asynchronous by design: create a job, YouTube generates daily CSVs, we
  * download them. First run therefore returns nothing for 24-48h, and the data is
  * always 1-2 days behind — the same lag YouTube Studio shows.
+ *
+ * The part that costs data if ignored: YouTube does not generate a report at all
+ * until a job exists for it. Creating a job backfills only 30 days, and historical
+ * reports expire 30 days after generation — so every day without a job is a day of
+ * that report permanently lost. auditReportingJobs() exists to make that visible
+ * before the loss is irreversible rather than after.
  */
 export const REACH_REPORT_TYPE = 'channel_reach_basic_a1';
 const REACH_JOB_NAME = 'ytstats channel reach (CTR)';
+const JOB_NAME_PREFIX = 'ytstats';
 
-export async function listReachJobs(apis) {
-  const res = await call(() => apis.reporting.jobs.list());
-  return res.data.jobs ?? [];
+/** Page a Reporting API list method that returns { [key], nextPageToken }. */
+async function pageAll(fn, key, params = {}) {
+  const items = [];
+  let pageToken;
+  do {
+    const res = await call(() => fn(pageToken ? { ...params, pageToken } : params));
+    items.push(...(res.data[key] ?? []));
+    pageToken = res.data.nextPageToken;
+  } while (pageToken);
+  return items;
+}
+
+/**
+ * Report types this channel may schedule, discovered live.
+ *
+ * Deliberately not a hardcoded list. Google version-bumps report ids in place
+ * (channel_basic_a2 → a3) and its own documentation pages disagree with each
+ * other about the current set, so a constant would rot silently and we would
+ * create jobs for ids that no longer exist.
+ *
+ * Uses reportTypes.list, which needs only yt-analytics.readonly — a scope
+ * ytstats already requests, so this costs no additional consent.
+ */
+export async function listReportTypes(apis) {
+  const types = await pageAll(p => apis.reporting.reportTypes.list(p), 'reportTypes');
+  return types.map(t => ({
+    id: t.id,
+    name: t.name ?? null,
+    // A deprecated type still lists but cannot usefully be scheduled, and a
+    // system-managed one is created by YouTube itself — jobs.create rejects both.
+    deprecated: Boolean(t.deprecateTime),
+    deprecateTime: t.deprecateTime ?? null,
+    systemManaged: Boolean(t.systemManaged),
+  }));
+}
+
+export async function listJobs(apis) {
+  return pageAll(p => apis.reporting.jobs.list(p), 'jobs');
+}
+
+/** Kept under its original name: `reporting.listReachJobs` is a published export. */
+export const listReachJobs = listJobs;
+
+/**
+ * Compare what this channel could collect against what it is collecting.
+ *
+ * `missing` is the actionable part — every entry is a report type accruing no
+ * data right now, and no later action recovers more than the trailing 30 days.
+ */
+export async function auditReportingJobs(apis) {
+  const [types, jobs] = await Promise.all([listReportTypes(apis), listJobs(apis)]);
+
+  const activeIds = new Set(jobs.map(j => j.reportTypeId));
+  const schedulable = types.filter(t => !t.deprecated && !t.systemManaged);
+
+  const active = schedulable.filter(t => activeIds.has(t.id));
+  const missing = schedulable.filter(t => !activeIds.has(t.id));
+
+  return {
+    available: schedulable,
+    active,
+    missing,
+    jobs: jobs.map(j => ({
+      id: j.id,
+      reportTypeId: j.reportTypeId,
+      name: j.name ?? null,
+      createTime: j.createTime ?? null,
+    })),
+    // Jobs whose report type is no longer schedulable still produce data; they
+    // are counted as active above only if the type is still listed, so report
+    // the raw total separately rather than implying the two must agree.
+    jobCount: jobs.length,
+    coverage: schedulable.length ? active.length / schedulable.length : 1,
+  };
+}
+
+/**
+ * Create jobs for the given report type ids, skipping those already scheduled.
+ *
+ * One failure does not abort the rest: a type that this channel cannot schedule
+ * should not prevent the other fifteen from starting to collect today.
+ */
+export async function ensureJobs(apis, reportTypeIds, { onProgress } = {}) {
+  const existing = await listJobs(apis);
+  const byType = new Map(existing.map(j => [j.reportTypeId, j]));
+
+  const created = [];
+  const skipped = [];
+  const failed = [];
+
+  for (const [i, reportTypeId] of reportTypeIds.entries()) {
+    const already = byType.get(reportTypeId);
+    if (already) {
+      skipped.push({ reportTypeId, jobId: already.id, reason: 'already-scheduled' });
+      continue;
+    }
+    onProgress?.(`Creating reporting job ${i + 1}/${reportTypeIds.length}: ${reportTypeId}...`);
+    try {
+      const res = await call(() =>
+        apis.reporting.jobs.create({
+          requestBody: { reportTypeId, name: `${JOB_NAME_PREFIX} ${reportTypeId}` },
+        }),
+      );
+      created.push({ reportTypeId, jobId: res.data.id ?? null, createTime: res.data.createTime ?? null });
+    } catch (err) {
+      failed.push({ reportTypeId, code: err.diagnostic?.code ?? err.code ?? null, message: err.message });
+    }
+  }
+
+  return { created, skipped, failed };
 }
 
 /** Find or create the reach job. Safe to call on every run. */
 export async function ensureReachJob(apis) {
-  const jobs = await listReachJobs(apis);
+  const jobs = await listJobs(apis);
   const existing = jobs.find(j => j.reportTypeId === REACH_REPORT_TYPE);
   if (existing) return existing;
 
@@ -34,7 +148,7 @@ export async function ensureReachJob(apis) {
   return res.data;
 }
 
-async function listReports(apis, jobId) {
+export async function listReports(apis, jobId) {
   const reports = [];
   let pageToken;
   do {
@@ -45,6 +159,17 @@ async function listReports(apis, jobId) {
     pageToken = res.data.nextPageToken;
   } while (pageToken);
   return reports;
+}
+
+/**
+ * Download one report body.
+ *
+ * Goes through `call()` like every other request here: `downloadCsv` is a bare
+ * fetch, so without the wrapper a Google 5xx escapes classification and lands as
+ * UNEXPECTED / recoverable:false, halting a caller on a transient failure.
+ */
+export async function downloadReport(apis, downloadUrl) {
+  return call(() => apis.downloadCsv(downloadUrl));
 }
 
 /**

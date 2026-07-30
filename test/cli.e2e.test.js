@@ -282,6 +282,30 @@ describe('ytstats CLI (end to end)', () => {
     });
   });
 
+  describe('reports', () => {
+    it('refuses reports-enable without --all or --type, before authenticating', async () => {
+      // Validation runs before auth, so an unauthenticated caller still learns
+      // the flag is missing rather than being told to log in first.
+      const { stdout } = await ytstats(['reports-enable'], { configDir: dir, cwd: dir });
+      const out = JSON.parse(stdout);
+      expect(out.ok).toBe(false);
+      expect(out.errors[0].code).toBe('INPUT_MISSING_REQUIRED');
+    });
+
+    it('both report commands are registered', async () => {
+      const { stdout } = await ytstats(['--help'], { configDir: dir, cwd: dir });
+      expect(stdout).toMatch(/\breports\b/);
+      expect(stdout).toMatch(/\breports-enable\b/);
+    });
+
+    it('reports still emits one JSON document when unauthenticated', async () => {
+      const { stdout } = await ytstats(['reports'], { configDir: dir, cwd: dir });
+      const out = JSON.parse(stdout);
+      expect(out.ok).toBe(false);
+      expect(out.data).toBeNull();
+    });
+  });
+
   describe('doctor', () => {
     it('reports every failing prerequisite in one call', async () => {
       const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
@@ -311,6 +335,15 @@ describe('ytstats CLI (end to end)', () => {
       const ids = JSON.parse(stdout).data.checks.map(c => c.id);
       expect(ids).toEqual(expect.arrayContaining(
         ['api_reachable', 'api_analytics', 'api_reporting']));
+    });
+
+    it('checks that reporting jobs are scheduled, not just that the API is on', async () => {
+      // An enabled Reporting API with no job answers every request successfully
+      // and returns data YouTube never generated. Checking only api_reporting
+      // would call that setup healthy while history is being lost.
+      const { stdout } = await ytstats(['doctor'], { configDir: dir, cwd: dir });
+      const ids = JSON.parse(stdout).data.checks.map(c => c.id);
+      expect(ids).toContain('reporting_jobs');
     });
 
     it('reports the consent screen as unknown rather than passing it silently', async () => {

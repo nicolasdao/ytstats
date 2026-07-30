@@ -786,6 +786,98 @@ export const DIAGNOSTICS = {
     },
   }),
 
+  REPORTING_JOBS_MISSING: def({
+    code: 'REPORTING_JOBS_MISSING',
+    severity: SEVERITY.WARNING,
+    exitCode: EXIT.OK,
+    recoverable: true,
+    // Re-running the same command changes nothing — jobs must be created first.
+    retryable: false,
+    title: 'Reporting jobs are missing, so YouTube is not collecting this data',
+    detail:
+      'The YouTube Reporting API only generates a report once a job exists for it. Report types with no ' +
+      'job are producing nothing right now, and creating a job later backfills just 30 days — everything ' +
+      'older is unrecoverable by any means. This is silent by design: queries keep succeeding and the ' +
+      'missing history never appears as an error.',
+    cause:
+      'A reporting job was never created for these report types. ytstats only creates the reach job, and ' +
+      'only when ytstats reach is first run.',
+    remediation: {
+      summary: 'Create the missing jobs now — the backfill window is 30 days and it is already running.',
+      steps: [
+        'Run: ytstats reports  to see which report types have no job.',
+        'Run: ytstats reports-enable --all  to create a job for every schedulable type.',
+        'Wait 24-48 hours, then the first reports (including a 30-day backfill) become downloadable.',
+        'Download regularly: reports expire 60 days after generation (30 days for backfill reports), ' +
+          'so a job nobody collects from still loses data.',
+      ],
+      commands: [
+        { run: 'ytstats reports', description: 'Show which report types have no job' },
+        { run: 'ytstats reports-enable --all', description: 'Create a job for every missing report type' },
+      ],
+      docs: ['https://developers.google.com/youtube/reporting/v1/reports'],
+    },
+  }),
+
+  REPORTS_EXPIRING: def({
+    code: 'REPORTS_EXPIRING',
+    severity: SEVERITY.WARNING,
+    exitCode: EXIT.OK,
+    recoverable: true,
+    retryable: false,
+    title: 'Generated reports are about to expire and have not been archived',
+    detail:
+      'YouTube has generated reports that have never been downloaded. Reports expire 60 days after ' +
+      'generation (30 days for backfill reports), so these will disappear from Google\'s servers and ' +
+      'the periods they cover will have no record anywhere. Reporting jobs make YouTube generate data; ' +
+      'they do not preserve it.',
+    cause:
+      'ytstats sync has not been run recently enough. The Reporting API is a delivery mechanism with ' +
+      'expiring artifacts, not an archive.',
+    remediation: {
+      summary: 'Run ytstats sync now, then put it on a schedule shorter than 60 days.',
+      steps: [
+        'Run: ytstats sync  to download everything outstanding into the local archive.',
+        'Schedule it — monthly is comfortable against a 60-day expiry, weekly is safer.',
+        'Run: ytstats archive  to confirm what is now stored locally.',
+        'Back up the archive directory; it is the only copy of data older than 60 days.',
+      ],
+      commands: [
+        { run: 'ytstats sync', description: 'Download every outstanding report into the local archive' },
+        { run: 'ytstats archive', description: 'Show what the local archive currently holds' },
+      ],
+      docs: ['https://developers.google.com/youtube/reporting/v1/reports'],
+    },
+  }),
+
+  ANALYTICS_METRICS_UNSUPPORTED: def({
+    code: 'ANALYTICS_METRICS_UNSUPPORTED',
+    severity: SEVERITY.WARNING,
+    exitCode: EXIT.OK,
+    recoverable: true,
+    retryable: false,
+    title: 'Some metrics are unavailable for this channel, so a reduced set was returned',
+    detail:
+      'YouTube rejected the full metric list for this query, so ytstats retried with the subset it accepts. ' +
+      'The returned rows are correct — they simply carry fewer fields. Which metrics a channel supports ' +
+      'varies, so this is not necessarily a fault.',
+    cause:
+      'The Analytics API rejects some documented metric/dimension combinations per channel. Newer metrics ' +
+      'such as engagedViews and relativeRetentionPerformance are the usual ones missing.',
+    remediation: {
+      summary: 'Nothing to fix — read context.dropped to see which metrics were unavailable.',
+      steps: [
+        'Check context.dropped for the metrics YouTube would not return.',
+        'Treat the absent fields as unknown rather than zero.',
+        'Use ytstats query -m <metric> to test a single metric against this channel directly.',
+      ],
+      commands: [
+        { run: 'ytstats query -m engagedViews --dimensions day', description: 'Test one metric against this channel' },
+      ],
+      docs: ['https://developers.google.com/youtube/analytics/metrics'],
+    },
+  }),
+
   CONFIG_UNWRITABLE: def({
     code: 'CONFIG_UNWRITABLE',
     exitCode: EXIT.GENERAL,

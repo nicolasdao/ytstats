@@ -14,7 +14,14 @@ import {
   fetchAudienceRetention,
   runCustomReport,
 } from '../../src/api/analytics.js';
-import { fetchReach, ensureReachJob, listReachJobs } from '../../src/api/reporting.js';
+import {
+  fetchReach,
+  ensureReachJob,
+  listReachJobs,
+  listReportTypes,
+  auditReportingJobs,
+  ensureJobs,
+} from '../../src/api/reporting.js';
 import { ERROR_CODES } from '../../src/errors.js';
 
 /** Build an analytics response in the API's columnHeaders/rows shape. */
@@ -158,8 +165,41 @@ describe('Analytics API — query shapes', () => {
     const rows = await fetchAudienceRetention({ analytics }, { videoId: 'v1', startDate: 'a', endDate: 'b' });
 
     expect(calls[0].filters).toBe('video==v1');
-    expect(rows[0]).toEqual({ position: 0, ratio: 1.54 });
-    expect(rows[1]).toEqual({ position: 0.5, ratio: 0.82 });
+    expect(rows[0]).toMatchObject({ position: 0, ratio: 1.54 });
+    expect(rows[1]).toMatchObject({ position: 0.5, ratio: 0.82 });
+  });
+
+  it('retention asks for the drop-off metrics, not just the watch ratio', async () => {
+    const { analytics, calls } = analyticsApi(() =>
+      resp(['elapsedVideoTimeRatio', 'audienceWatchRatio'], [[0, 1]]));
+    await fetchAudienceRetention({ analytics }, { videoId: 'v1', startDate: 'a', endDate: 'b' });
+
+    // audienceWatchRatio alone cannot distinguish leaving from skipping ahead.
+    expect(calls[0].metrics).toBe(
+      'audienceWatchRatio,relativeRetentionPerformance,startedWatching,stoppedWatching,totalSegmentImpressions',
+    );
+    expect(calls[0].dimensions).toBe('elapsedVideoTimeRatio');
+  });
+
+  it('retention returns real drop-off values, not just the right column count', async () => {
+    // Asserting a value rather than a shape: reading the wrong column name yields
+    // a full set of nulls that a length check happily passes. See the reach CSV
+    // regression in docs/gotchas/youtube-api.md.
+    const { analytics } = analyticsApi(() =>
+      resp(
+        ['elapsedVideoTimeRatio', 'audienceWatchRatio', 'relativeRetentionPerformance', 'startedWatching', 'stoppedWatching', 'totalSegmentImpressions'],
+        [[0.25, 0.71, 1.12, 40, 260, 1500]],
+      ));
+    const rows = await fetchAudienceRetention({ analytics }, { videoId: 'v1', startDate: 'a', endDate: 'b' });
+
+    expect(rows[0]).toEqual({
+      position: 0.25,
+      ratio: 0.71,
+      relativeRetentionPerformance: 1.12,
+      startedWatching: 40,
+      stoppedWatching: 260,
+      totalSegmentImpressions: 1500,
+    });
   });
 
   it.each([
@@ -205,6 +245,173 @@ describe('Analytics API — query shapes', () => {
     ]);
     expect(out.rows).toEqual([{ day: '2026-03-01', views: 10 }]);
     expect(calls[0].metrics).toBe('views');
+  });
+});
+
+describe('Analytics API — metric degradation', () => {
+  const NOT_SUPPORTED = { response: { status: 400, data: { error: { message: 'The query is not supported.' } } } };
+
+  it('drops relativeRetentionPerformance before the segment counts', async () => {
+    // Losing the whole richer set because one peer-comparison metric is
+    // unavailable would throw away the drop-off counts for no reason.
+    const { analytics, calls } = analyticsApi(params => {
+      if (params.metrics.includes('relativeRetentionPerformance')) throw NOT_SUPPORTED;
+      return resp(['elapsedVideoTimeRatio', 'audienceWatchRatio', 'stoppedWatching'], [[0, 1, 12]]);
+    });
+    const dropped = [];
+    const rows = await fetchAudienceRetention(
+      { analytics },
+      { videoId: 'v1', startDate: 'a', endDate: 'b', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1].metrics).toBe('audienceWatchRatio,startedWatching,stoppedWatching,totalSegmentImpressions');
+    expect(dropped).toEqual(['relativeRetentionPerformance']);
+    expect(rows[0].stoppedWatching).toBe(12);
+  });
+
+  it('falls all the way back to audienceWatchRatio rather than losing retention', async () => {
+    const { analytics, calls } = analyticsApi(params => {
+      if (params.metrics !== 'audienceWatchRatio') throw NOT_SUPPORTED;
+      return resp(['elapsedVideoTimeRatio', 'audienceWatchRatio'], [[0, 0.9]]);
+    });
+    const dropped = [];
+    const rows = await fetchAudienceRetention(
+      { analytics },
+      { videoId: 'v1', startDate: 'a', endDate: 'b', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(calls).toHaveLength(3);
+    expect(rows[0].ratio).toBe(0.9);
+    expect(rows[0].stoppedWatching).toBeNull();
+    expect(dropped).toContain('stoppedWatching');
+  });
+
+  it('rethrows a failure that is not about metric support', async () => {
+    // A 403 must not be silently retried into a smaller query — that would
+    // report degraded data for what is actually an auth or permission problem.
+    const forbidden = { response: { status: 403, data: { error: { message: 'Forbidden' } } } };
+    const { analytics, calls } = analyticsApi(() => { throw forbidden; });
+    const err = await fetchDailyAnalytics({ analytics }, { startDate: 'a', endDate: 'b' }).catch(e => e);
+
+    expect(err.code).toBe(ERROR_CODES.ACCESS_DENIED);
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each([
+    ['daily', fetchDailyAnalytics, 'day'],
+    ['video analytics', fetchVideoAnalytics, 'video'],
+    ['traffic sources', fetchTrafficSources, 'insightTrafficSourceType'],
+    ['device types', fetchDeviceTypes, 'deviceType'],
+    ['content types', fetchContentTypes, 'creatorContentType'],
+    ['geography', fetchGeography, 'country'],
+    ['playback locations', fetchPlaybackLocations, 'insightPlaybackLocationType'],
+  ])('%s requests engagedViews alongside views', async (_name, fn, dimension) => {
+    // views changed meaning for Shorts on 2025-04-30; engagedViews preserves the
+    // old definition and is what makes numbers comparable across that date.
+    const { analytics, calls } = analyticsApi(() => resp([dimension, 'views'], [['x', 1]]));
+    await fn({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].metrics).toMatch(/(^|,)views(,|$)/);
+    expect(calls[0].metrics).toMatch(/(^|,)engagedViews(,|$)/);
+  });
+
+  it('keeps engagedViews off the fragile insightTrafficSourceDetail dimension', async () => {
+    // That dimension errors on any metric beyond views — a documented trap.
+    const { analytics, calls } = analyticsApi(() => resp(['insightTrafficSourceDetail', 'views'], [['x', 1]]));
+    await fetchSearchTerms({ analytics }, { startDate: 'a', endDate: 'b' });
+    await fetchTrafficSourceDetails({ analytics }, { startDate: 'a', endDate: 'b', sourceType: 'RELATED_VIDEO' });
+
+    expect(calls[0].metrics).toBe('views');
+    expect(calls[1].metrics).toBe('views');
+  });
+});
+
+describe('Reporting API — job coverage', () => {
+  const reportingApi = ({ reportTypes = [], jobs = [], createFails = [] } = {}) => {
+    const created = [];
+    return {
+      created,
+      apis: {
+        reporting: {
+          reportTypes: { list: vi.fn(async () => ({ data: { reportTypes } })) },
+          jobs: {
+            list: vi.fn(async () => ({ data: { jobs } })),
+            create: vi.fn(async ({ requestBody }) => {
+              if (createFails.includes(requestBody.reportTypeId)) {
+                throw { response: { status: 403, data: { error: { message: 'not permitted' } } } };
+              }
+              created.push(requestBody);
+              return { data: { id: `job-${requestBody.reportTypeId}` } };
+            }),
+          },
+        },
+      },
+    };
+  };
+
+  it('excludes deprecated and system-managed types from what can be scheduled', async () => {
+    const { apis } = reportingApi({
+      reportTypes: [
+        { id: 'channel_basic_a3', name: 'User activity' },
+        { id: 'channel_basic_a2', name: 'Old', deprecateTime: '2025-01-01T00:00:00Z' },
+        { id: 'channel_system', name: 'Managed', systemManaged: true },
+      ],
+    });
+    const types = await listReportTypes(apis);
+    const audit = await auditReportingJobs(apis);
+
+    expect(types).toHaveLength(3);
+    expect(audit.available.map(t => t.id)).toEqual(['channel_basic_a3']);
+  });
+
+  it('reports which report types are collecting nothing', async () => {
+    const { apis } = reportingApi({
+      reportTypes: [
+        { id: 'channel_basic_a3' },
+        { id: 'channel_reach_basic_a1' },
+        { id: 'channel_combined_a3' },
+      ],
+      jobs: [{ id: 'job-1', reportTypeId: 'channel_reach_basic_a1', createTime: '2026-01-01T00:00:00Z' }],
+    });
+    const audit = await auditReportingJobs(apis);
+
+    expect(audit.active.map(t => t.id)).toEqual(['channel_reach_basic_a1']);
+    expect(audit.missing.map(t => t.id)).toEqual(['channel_basic_a3', 'channel_combined_a3']);
+    expect(audit.coverage).toBeCloseTo(1 / 3);
+  });
+
+  it('pages reportTypes.list rather than reading only the first page', async () => {
+    const pages = [
+      { data: { reportTypes: [{ id: 'a' }], nextPageToken: 'p2' } },
+      { data: { reportTypes: [{ id: 'b' }] } },
+    ];
+    let i = 0;
+    const apis = { reporting: { reportTypes: { list: vi.fn(async () => pages[i++]) } } };
+
+    expect((await listReportTypes(apis)).map(t => t.id)).toEqual(['a', 'b']);
+  });
+
+  it('creates only the missing jobs and never duplicates an existing one', async () => {
+    const { apis, created } = reportingApi({
+      jobs: [{ id: 'job-1', reportTypeId: 'channel_reach_basic_a1' }],
+    });
+    const out = await ensureJobs(apis, ['channel_reach_basic_a1', 'channel_basic_a3']);
+
+    expect(created.map(r => r.reportTypeId)).toEqual(['channel_basic_a3']);
+    expect(out.skipped[0]).toMatchObject({ reportTypeId: 'channel_reach_basic_a1', reason: 'already-scheduled' });
+    expect(out.created[0]).toMatchObject({ reportTypeId: 'channel_basic_a3', jobId: 'job-channel_basic_a3' });
+  });
+
+  it('keeps creating jobs after one report type is rejected', async () => {
+    // One unschedulable type must not stop the other fifteen from starting to
+    // collect today — the backfill window is only 30 days.
+    const { apis } = reportingApi({ createFails: ['channel_cards_a2'] });
+    const out = await ensureJobs(apis, ['channel_cards_a2', 'channel_basic_a3']);
+
+    expect(out.failed).toHaveLength(1);
+    expect(out.failed[0].reportTypeId).toBe('channel_cards_a2');
+    expect(out.created.map(c => c.reportTypeId)).toEqual(['channel_basic_a3']);
   });
 });
 

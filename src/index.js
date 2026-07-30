@@ -36,6 +36,16 @@ export * as reporting from './api/reporting.js';
 export * from './api/transforms.js';
 
 export { fetchAll } from './fetch-all.js';
+export { syncReports, findExpiringReports } from './sync.js';
+export {
+  dataDir,
+  resolveDataDir,
+  appendRows,
+  readRows,
+  archiveStatus,
+  keyColumns,
+  daysUntilExpiry,
+} from './archive.js';
 export { resolveDateRange, daysBetween, toIsoDate } from './dates.js';
 export { configDir } from './config/store.js';
 export { renderEnvelope, createReporter } from './output.js';

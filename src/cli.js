@@ -23,6 +23,8 @@ import * as data from './api/data.js';
 import * as analytics from './api/analytics.js';
 import * as reporting from './api/reporting.js';
 import { fetchAll } from './fetch-all.js';
+import { syncReports, findExpiringReports } from './sync.js';
+import { archiveStatus, dataDir } from './archive.js';
 
 const pkg = JSON.parse(
   fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf-8'),
@@ -350,23 +352,91 @@ export function buildProgram(deps = {}) {
         }
 
         // 6. Reporting API v1 — the only source of thumbnail impressions and CTR.
+        let reportingWorks = false;
         try {
-          const jobs = await reporting.listReachJobs(apis);
+          const jobs = await reporting.listJobs(apis);
+          reportingWorks = true;
           record('api_reporting', 'YouTube Reporting API enabled', true,
             `${jobs.length} reporting job(s) on this channel`);
         } catch (err) {
           record('api_reporting', 'YouTube Reporting API enabled', false, null,
             err.diagnostic ?? diagnoseGoogleError(err));
         }
+
+        // 7. Reporting jobs actually scheduled.
+        //
+        // The only check here that reports a loss rather than a blockage. An
+        // enabled API with no job still answers every request successfully — it
+        // just returns data YouTube never generated. Because creating a job
+        // backfills 30 days and nothing recovers more, the cost of noticing late
+        // is measured in months of history, so this fails rather than warns.
+        if (reportingWorks) {
+          try {
+            const audit = await reporting.auditReportingJobs(apis);
+            if (audit.missing.length === 0) {
+              record('reporting_jobs', 'Reporting jobs scheduled for every report type', true,
+                `${audit.active.length}/${audit.available.length} report types collecting`);
+            } else {
+              record('reporting_jobs', 'Reporting jobs scheduled for every report type', false,
+                `${audit.active.length}/${audit.available.length} report types collecting. `
+                + `Not collecting: ${audit.missing.map(t => t.id).join(', ')}. `
+                + 'YouTube generates nothing for these until a job exists, and creating one later '
+                + 'backfills only 30 days.',
+                diagnose(DIAGNOSTICS.REPORTING_JOBS_MISSING, {
+                  detail: `${audit.missing.length} report type(s) have no job: `
+                    + audit.missing.map(t => t.id).join(', '),
+                }));
+            }
+          } catch (err) {
+            record('reporting_jobs', 'Reporting jobs scheduled for every report type', false, null,
+              err.diagnostic ?? diagnoseGoogleError(err));
+          }
+          // 7b. Generated reports actually downloaded.
+          //
+          // Jobs and archiving are separate failures with the same symptom. A
+          // perfectly configured job still loses data if nothing collects from
+          // it, because reports expire 60 days after generation — so checking
+          // only that jobs exist would call that setup healthy too.
+          try {
+            const { pending, urgent } = await findExpiringReports(apis, { now: now() });
+            if (!pending.length) {
+              record('reports_archived', 'Generated reports downloaded to the local archive', true,
+                'nothing outstanding');
+            } else if (!urgent.length) {
+              record('reports_archived', 'Generated reports downloaded to the local archive', true,
+                `${pending.length} report(s) not yet archived, none within 14 days of expiry. `
+                + 'Run: ytstats sync');
+            } else {
+              const soonest = urgent[0];
+              record('reports_archived', 'Generated reports downloaded to the local archive', false,
+                `${urgent.length} of ${pending.length} un-archived report(s) expire within 14 days `
+                + `(soonest: ${soonest.reportTypeId}, ${soonest.daysUntilExpiry} day(s) left).`,
+                diagnose(DIAGNOSTICS.REPORTS_EXPIRING, {
+                  detail: `${urgent.length} report(s) expire within 14 days; `
+                    + `${soonest.reportTypeId} has ${soonest.daysUntilExpiry} day(s) left`,
+                }));
+            }
+          } catch (err) {
+            record('reports_archived', 'Generated reports downloaded to the local archive', false, null,
+              err.diagnostic ?? diagnoseGoogleError(err));
+          }
+        } else {
+          record('reporting_jobs', 'Reporting jobs scheduled for every report type', false,
+            'skipped — the Reporting API is not reachable', null);
+          record('reports_archived', 'Generated reports downloaded to the local archive', false,
+            'skipped — the Reporting API is not reachable', null);
+        }
       } else {
         for (const [id, label] of [
           ['api_reachable', 'YouTube Data API reachable and token valid'],
           ['api_analytics', 'YouTube Analytics API enabled'],
           ['api_reporting', 'YouTube Reporting API enabled'],
+          ['reporting_jobs', 'Reporting jobs scheduled for every report type'],
+          ['reports_archived', 'Generated reports downloaded to the local archive'],
         ]) record(id, label, false, 'skipped — earlier checks failed', null);
       }
 
-      // 7. Consent screen published to Production.
+      // 9. Consent screen published to Production.
       //
       // No Google API exposes this, so it cannot be checked directly — and it is
       // the one setup step whose failure is delayed: in Testing, Google expires
@@ -568,7 +638,22 @@ export function buildProgram(deps = {}) {
   ).action(run('retention', async (videoId, cmdOpts, globalOpts) => {
     const { apis } = withApis(globalOpts, cmdOpts);
     const range = rangeFrom(cmdOpts);
-    const curve = await analytics.fetchAudienceRetention(apis, { ...range, videoId });
+
+    // Without this, a channel that cannot serve the drop-off metrics gets a curve
+    // whose new fields are all null and nothing anywhere saying why — the exact
+    // shape of the reach-CSV regression this project already paid for once.
+    const dropped = [];
+    const curve = await analytics.fetchAudienceRetention(apis, {
+      ...range,
+      videoId,
+      onDegraded: m => dropped.push(...m),
+    });
+    if (dropped.length) {
+      reporter.warn(diagnose(DIAGNOSTICS.ANALYTICS_METRICS_UNSUPPORTED, {
+        detail: `Unavailable for this channel: ${dropped.join(', ')}`,
+        dropped: dropped.join(', '),
+      }));
+    }
     return { videoId, period: range, curve };
   }));
 
@@ -614,8 +699,96 @@ export function buildProgram(deps = {}) {
     .option('-a, --account <channel>', 'channel id or @handle (also accepted before the command name)')
     .action(run('reach-jobs', async (cmdOpts, globalOpts) => {
       const { apis } = withApis(globalOpts, cmdOpts);
-      return reporting.listReachJobs(apis);
+      return reporting.listJobs(apis);
     }));
+
+  // ------------------------------------------------------------- reports
+  //
+  // The Reporting API only generates a report once a job exists for it, and a job
+  // created today backfills 30 days and no more. These two commands exist so that
+  // gap is visible and closable before it becomes unrecoverable history.
+
+  accountOption(
+    program
+      .command('reports')
+      .description('which Reporting API report types are collecting data, and which are not'),
+  ).action(run('reports', async (cmdOpts, globalOpts) => {
+    const { apis } = withApis(globalOpts, cmdOpts);
+    const audit = await reporting.auditReportingJobs(apis);
+
+    if (audit.missing.length) {
+      reporter.warn(diagnose(DIAGNOSTICS.REPORTING_JOBS_MISSING, {
+        detail: `${audit.missing.length} of ${audit.available.length} report type(s) have no job: `
+          + audit.missing.map(t => t.id).join(', '),
+      }));
+    }
+    return audit;
+  }));
+
+  accountOption(
+    program
+      .command('reports-enable')
+      .description('create Reporting API jobs so YouTube starts generating the missing reports')
+      .option('--all', 'create a job for every report type that has none', false)
+      .option('-t, --type <id...>', 'create jobs for specific report type ids'),
+  ).action(run('reports-enable', async (cmdOpts, globalOpts) => {
+    const { apis } = withApis(globalOpts, cmdOpts);
+    const audit = await reporting.auditReportingJobs(apis);
+
+    const wanted = cmdOpts.type?.length ? cmdOpts.type : audit.missing.map(t => t.id);
+    const result = await reporting.ensureJobs(apis, wanted, { onProgress: m => reporter.progress(m) });
+
+    // A requested id that this channel cannot schedule is worth naming: silently
+    // returning "0 created" reads as "nothing to do" rather than "that was wrong".
+    for (const f of result.failed) reporter.warn(`${f.reportTypeId}: ${f.message}`);
+
+    return {
+      ...result,
+      requested: wanted,
+      // First reports arrive 24-48h later, so an immediate re-run showing zero
+      // rows is expected rather than a sign the jobs did not take.
+      note: result.created.length
+        ? `${result.created.length} job(s) created. YouTube generates the first reports within `
+          + '24-48 hours, including a 30-day backfill. Download regularly — reports expire 60 days '
+          + 'after generation (30 days for backfill reports).'
+        : 'No new jobs were needed.',
+    };
+  }, { validate: cmdOpts => (
+    cmdOpts.all || cmdOpts.type?.length
+      ? []
+      : [diagnose(DIAGNOSTICS.INPUT_MISSING_REQUIRED, {
+        flag: '--all',
+        detail: 'Pass --all to create every missing job, or --type <id> for specific report types. '
+          + 'Run ytstats reports first to see what is missing',
+      })]
+  ) }));
+
+  // ------------------------------------------------------------- archive
+  //
+  // Creating jobs makes YouTube generate reports; it does not stop them expiring
+  // 60 days later. `sync` is what turns a rolling window into history.
+
+  accountOption(
+    program
+      .command('sync')
+      .description('download every outstanding Reporting API report into the local archive'),
+  ).action(run('sync', async (cmdOpts, globalOpts) => {
+    const { apis } = withApis(globalOpts, cmdOpts);
+    const result = await syncReports(apis, { onProgress: m => reporter.progress(m) });
+    for (const f of result.failed) reporter.warn(`${f.reportTypeId}: ${f.message}`);
+    return {
+      ...result,
+      dataDir: dataDir(),
+      note: 'Reports expire 60 days after generation (30 for backfill). Run this on a schedule '
+        + 'shorter than that — the archive is the only copy of anything older.',
+    };
+  }));
+
+  // Reads local files only — no auth, like `status`.
+  program
+    .command('archive')
+    .description('what the local report archive holds')
+    .action(run('archive', async () => archiveStatus()));
 
   // ------------------------------------------------------------- fetch
 

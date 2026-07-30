@@ -61,6 +61,20 @@ export async function fetchAll(apis, {
   const notes = [];
   const progress = msg => onProgress?.(msg);
 
+  // A metric fallback is not a step failure: the dataset arrived, with fewer
+  // columns. Keeping it out of `warnings` preserves that list's meaning ("this
+  // step returned nothing"), while still saying why a field is absent — the
+  // alternative is a null column with no explanation anywhere.
+  const degraded = new Map();
+  const opts = name => ({
+    ...period,
+    onDegraded: dropped => {
+      const set = degraded.get(name) ?? new Set();
+      for (const m of dropped) set.add(m);
+      degraded.set(name, set);
+    },
+  });
+
   async function step(name, fn, fallback) {
     progress(`Fetching ${name}...`);
     try {
@@ -91,7 +105,7 @@ export async function fetchAll(apis, {
   const videos = await step('videos', () => f.fetchVideos(apis, videoIds), []);
 
   const [daily, cards] = await Promise.all([
-    step('daily', () => f.fetchDailyAnalytics(apis, period), []),
+    step('daily', () => f.fetchDailyAnalytics(apis, opts('daily')), []),
     step('cardMetrics', () => f.fetchCardMetrics(apis, period), []),
   ]);
 
@@ -99,14 +113,14 @@ export async function fetchAll(apis, {
     videoAnalytics, trafficSources, demographics, deviceTypes,
     contentTypes, searchTerms, geography, playbackLocations,
   ] = await Promise.all([
-    step('videoAnalytics', () => f.fetchVideoAnalytics(apis, period), []),
-    step('trafficSources', () => f.fetchTrafficSources(apis, period), []),
+    step('videoAnalytics', () => f.fetchVideoAnalytics(apis, opts('videoAnalytics')), []),
+    step('trafficSources', () => f.fetchTrafficSources(apis, opts('trafficSources')), []),
     step('demographics', () => f.fetchDemographics(apis, period), []),
-    step('deviceTypes', () => f.fetchDeviceTypes(apis, period), []),
-    step('contentTypes', () => f.fetchContentTypes(apis, period), []),
+    step('deviceTypes', () => f.fetchDeviceTypes(apis, opts('deviceTypes')), []),
+    step('contentTypes', () => f.fetchContentTypes(apis, opts('contentTypes')), []),
     step('searchTerms', () => f.fetchSearchTerms(apis, period), []),
-    step('geography', () => f.fetchGeography(apis, period), []),
-    step('playbackLocations', () => f.fetchPlaybackLocations(apis, period), []),
+    step('geography', () => f.fetchGeography(apis, opts('geography')), []),
+    step('playbackLocations', () => f.fetchPlaybackLocations(apis, opts('playbackLocations')), []),
   ]);
 
   // Only drill into traffic source types the channel actually has.
@@ -133,8 +147,10 @@ export async function fetchAll(apis, {
 
     for (const [i, video] of targets.entries()) {
       progress(`Fetching retention ${i + 1}/${targets.length}...`);
+      // Aggregated under one name, not one per video — 50 identical notes saying
+      // the channel lacks relativeRetentionPerformance is noise, not information.
       const curve = await step(`retention:${video.id}`,
-        () => f.fetchAudienceRetention(apis, { ...period, videoId: video.id }),
+        () => f.fetchAudienceRetention(apis, { ...opts('retention'), videoId: video.id }),
         null);
       if (curve?.length) audienceRetention[video.id] = curve;
     }
@@ -158,6 +174,13 @@ export async function fetchAll(apis, {
 
   if (reach) {
     result.reach = await step('reach', () => f.fetchReach(apis, { onProgress }), { pending: true, rows: [] });
+  }
+
+  for (const [name, dropped] of degraded) {
+    notes.push(
+      `${name}: YouTube does not support ${[...dropped].join(', ')} for this channel, `
+      + 'so those fields are absent. Treat them as unknown rather than zero.',
+    );
   }
 
   return {
