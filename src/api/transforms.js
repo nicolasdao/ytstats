@@ -93,6 +93,80 @@ function coerce(value) {
   return v;
 }
 
+/**
+ * Caption timestamp to seconds. Handles both cue formats in one place:
+ *
+ *   VTT  00:01:02.500   HH:MM:SS.mmm, or MM:SS.mmm with the hour omitted
+ *   SRT  00:01:02,500   identical but for the comma before milliseconds
+ *
+ * Returns null for anything else, so an unrecognised format is visible as a null
+ * rather than silently becoming 0 — which would read as "the very start of the
+ * video" and quietly misalign every cue against a retention curve.
+ */
+function cueTimeToSeconds(stamp) {
+  const m = String(stamp).trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?$/);
+  if (!m) return null;
+  const [, hh, mm, ss, frac] = m;
+  const ms = frac ? Number(frac.padEnd(3, '0')) : 0;
+  return Number(hh ?? 0) * 3600 + Number(mm) * 60 + Number(ss) + ms / 1000;
+}
+
+/**
+ * Parse a WebVTT or SubRip caption track into `{ start, end, text }` cues, with
+ * times as **seconds** rather than timestamp strings.
+ *
+ * Seconds because the point of a transcript here is correlating it against a
+ * retention curve, whose x-axis is `elapsedVideoTimeRatio` — a number. Handing
+ * back "00:01:02.500" would make every consumer write this parser again.
+ *
+ * One parser covers both formats: they differ only in the millisecond separator
+ * (`.` vs `,`) and in SRT's leading sequence number. Multi-line cue text is joined
+ * with a space, since a caption's line breaks are a display detail rather than part
+ * of what was said.
+ *
+ * A blank line ends a cue, which is what keeps SRT's sequence number out of the
+ * previous cue's text — the number sits between the blank line and the next timing
+ * line, so a parser that only looked for `-->` would append "2" to what was said.
+ */
+export function parseCues(text) {
+  if (typeof text !== 'string' || text.trim() === '') return [];
+
+  const cues = [];
+  let current = null;
+  const flush = () => {
+    // A timing line with no text under it carries no transcript content.
+    if (current && current.text !== '') cues.push(current);
+    current = null;
+  };
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+
+    // `-->` is what identifies a timing line in both formats. Anything else is a
+    // header (WEBVTT), a sequence number, a NOTE, a cue id, or blank.
+    const arrow = line.indexOf('-->');
+    if (arrow !== -1) {
+      flush();
+      const start = cueTimeToSeconds(line.slice(0, arrow));
+      // Trailing WebVTT cue settings (align:start position:50%) follow the end time.
+      const end = cueTimeToSeconds(line.slice(arrow + 3).trim().split(/\s+/)[0]);
+      current = { start, end, text: '' };
+      continue;
+    }
+
+    if (line === '') { flush(); continue; }
+    if (!current) continue;
+
+    // Strip the inline markup WebVTT allows (<v Speaker>, <i>, <00:00:01.000>).
+    const clean = line.replace(/<[^>]*>/g, '').trim();
+    if (clean === '') continue;
+    current.text = current.text ? `${current.text} ${clean}` : clean;
+  }
+  flush();
+
+  return cues;
+}
+
 /** Reporting API dates arrive as 20260328.0; everything else uses ISO. Unify. */
 export function normalizeReportingDate(value) {
   if (value === null || value === undefined) return value ?? null;

@@ -33,6 +33,7 @@ export { createApis } from './api/client.js';
 export * as data from './api/data.js';
 export * as analytics from './api/analytics.js';
 export * as reporting from './api/reporting.js';
+export * as captions from './api/captions.js';
 export * from './api/transforms.js';
 
 export { fetchAll } from './fetch-all.js';
