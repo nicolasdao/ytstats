@@ -67,6 +67,35 @@ Reporting a dip without checking which one moved is guessing. Say which it was.
 
 Any of these four can be `null`, which means **the channel cannot serve that metric** — never that it is zero. A dropped metric comes with an `ANALYTICS_METRICS_UNSUPPORTED` warning naming it. Requires ytstats 0.6.0+; older versions return only `position` and `ratio`.
 
+## Cue times are seconds; retention positions are fractions
+
+The two datasets `transcript` and `retention` exist to be read together, and their time axes do not match:
+
+| Field | Unit |
+|---|---|
+| `retention` → `curve[].position` | fraction of the video, `0`–`1` |
+| `transcript` → `cues[].start` / `.end` | seconds |
+
+Converting needs the video's `durationSeconds` from `videos`. A cue at `t` seconds sits at `t / durationSeconds`. Comparing the two numbers directly — treating `position: 0.5` as 0.5 seconds, or a cue at `62` as past the end of a `0`–`1` axis — produces a confident answer about the wrong moment in the video.
+
+Always state the timestamp in seconds or `mm:ss` when quoting a line back to the user. "Around 60% in" is harder to act on than "at 1:02".
+
+## An auto-generated transcript is not a quote
+
+`trackKind: "ASR"` means YouTube's speech recognition produced the text. It reliably mangles names, product terms, jargon and anything spoken over music. Anything else was written or uploaded by the channel owner and is authoritative.
+
+The CLI prefers an author-written track and falls back to ASR, but it always reports which one it used — so the information is there and there is no excuse for presenting a machine transcription as a verbatim quote. When it is ASR, say so:
+
+> At 1:02 the auto-generated transcript reads "…" — worth checking against the video, since speech recognition is unreliable on names.
+
+This matters most in exactly the case the feature is for: explaining a retention drop-off. Recommending someone cut a line that they never actually said is worse than saying nothing.
+
+## An empty transcript means no captions, not no speech
+
+`cues: []` with `trackId: null` and a `DATA_EMPTY` warning means the video has no usable caption track — captions were never generated or are still processing, or every track is a draft. It does **not** mean the video is silent, and it does not mean the command failed.
+
+Note also that transcripts only work for videos the user owns, because `captions.download` requires edit permission on the video.
+
 ## `views` changed meaning on 30 April 2025
 
 YouTube redefined the metric rather than adding a new one: a **Shorts** view is now every play or replay, with no minimum watch time. Long-form was unaffected. `engagedViews` carries the previous definition.

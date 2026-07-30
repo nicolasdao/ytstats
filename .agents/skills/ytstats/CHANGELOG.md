@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0] - 2026-07-30
+
+### Added
+- Route transcript requests to the new `transcript <videoId>` command — "what did I say at the drop-off", "what was said", "subtitles". Added to the routing table in `SKILL.md`, the `.data` shapes table, and `references/commands.md` with the full cue shape.
+- Explain the opt-in captions permission. `login --with-captions` is now a routing entry of its own, and agents are told to confirm before running it: it takes over the browser and Google labels the permission "Manage your YouTube account", which is alarming without the explanation that it is the only scope captions have and the CLI only reads with it.
+- `AUTH_SCOPE_MISSING` in `references/troubleshooting.md`, with its own section. Includes the rule that a `null` in `status.scopes` means **unrecorded, not absent** — an agent must not tell a user to re-authorize on the strength of a null.
+- Guidance for pairing a transcript with a retention curve, in `SKILL.md` and `references/interpreting-results.md`. The unit mismatch is the trap: retention positions are fractions of the video, cue times are seconds, so converting needs `durationSeconds` from `videos`. Comparing them directly gives a confident answer about the wrong moment.
+- The rule that an `ASR` track is not a quote. Speech recognition mangles names and jargon, and the whole point of the feature is explaining a drop-off — recommending someone cut a line they never said is worse than saying nothing. `trackKind` is reported by the CLI, so agents must state which kind of track they are quoting.
+- Quota warning: `captions.download` is 200 units against a 10,000/day budget, so `transcript` is roughly 40-50 a day uncached. Agents are told never to loop it over a whole channel.
+
+### Changed
+- Require `ytstats` 0.7.0 or newer, up from 0.6.1. `transcript`, `login --with-captions`, `AUTH_SCOPE_MISSING` and the `scopes` field on accounts all arrive in 0.7.0; on 0.6.x this skill would route a user to a command that does not exist. Same reasoning as the 0.2.1 and 0.6.1 floor raises — the guidance only becomes true at the version that ships the behaviour.
+- Description now says 27 commands, not 26.
+
 ## [0.7.2] - 2026-07-30
 
 ### Fixed

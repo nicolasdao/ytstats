@@ -37,6 +37,20 @@ Dates must be exactly `YYYY-MM-DD` and must exist on the calendar — `2026-02-3
 
 `ytstats status` reports which one won as `credentialSource` (a path, `environment`, or `stored`) and the resolved `clientId`.
 
+### Permissions
+
+`login` requests three **read-only** scopes by default. `ytstats` never writes to a channel.
+
+One command needs more: `transcript`. Captions have no read-only scope — Google only offers `youtube.force-ssl`, which the consent screen calls *"Manage your YouTube account"*. So it is opt-in:
+
+```bash
+ytstats login --with-captions
+```
+
+Adding it later is safe: previously granted permissions are **preserved, not replaced**. Tell the user what the consent screen will say before they click, so the wording does not alarm them — it is the only scope captions have, and the CLI only reads with it.
+
+`ytstats status` reports what was actually granted per account as `scopes`. A `null` there means **unknown** (the account predates the field), not "nothing granted" — do not tell a user they lack a permission on the strength of a `null`. Requires ytstats 0.7.0+; earlier versions have no `scopes` field at all.
+
 **`--account` did nothing before 0.5.0.** The CLI dropped the selector before it reached the code that validates it, so every command answered with the **default** channel while reporting success — wrong numbers presented as correct, and `logout --account <other>` revoked the default channel's token. If a user reports figures that look like the wrong channel, check `ytstats --version` before anything else. On 0.5.0+ an unrecognised selector raises `AUTH_ACCOUNT_UNKNOWN` listing the valid channels, and both flag positions work.
 
 | Variable | Effect |
@@ -140,6 +154,31 @@ Returns `{ videoId, period, curve }` with roughly 100 points:
 
 Any of the four may be `null`, meaning **this channel cannot serve that metric** — never that the value is zero. `relativeRetentionPerformance` needs a peer set and is the one most often missing. When something was dropped the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly which. Requires ytstats 0.6.0+; earlier versions return only `position` and `ratio`.
 
+### transcript
+
+```bash
+ytstats transcript <videoId>
+```
+
+The caption transcript for one video, with cue timings. Pair it with `retention`: that says **where** viewers left, this says **what was being said** there. No date flags — a transcript is not a time series.
+
+**Needs the opt-in captions permission.** Run `ytstats login --with-captions` first. Without it the command fails with `AUTH_SCOPE_MISSING` before any request, and `nextSteps[0]` is the exact fix.
+
+Returns `{ videoId, trackId, language, trackKind, lastUpdated, cachedAt, cues }`. Each cue is exactly `{ start, end, text }`:
+
+| Field | Meaning |
+|---|---|
+| `start` / `end` | **Seconds, as numbers** — not `"00:01:02.500"` strings |
+| `text` | What was said. Multi-line cues joined, markup stripped |
+
+**`trackKind` changes what the text is worth.** `ASR` means YouTube's speech recognition wrote it — it mishears names, jargon, and anything over music. Anything else was written by the channel owner. Say which one you used when quoting a transcript; do not present an ASR line as a verbatim quote. `ytstats` prefers an author-written track, falls back to ASR, and skips drafts.
+
+A video with captions turned off returns `cues: []`, `trackId: null`, a `DATA_EMPTY` warning, and `ok: true` — that is "no captions", not a failure.
+
+Only works for videos on a channel the user owns: `captions.download` requires edit permission on the video.
+
+**Expensive, and cached for that reason.** `captions.download` costs **200 quota units** against the 10,000/day budget — about 50 transcripts a day, the priciest call the CLI makes. Results are cached locally and keyed on the caption track's `lastUpdated`, so a repeat run for an unchanged track costs 50 (the listing) instead of 250. Do not loop it over a whole channel; pull the videos that matter. Requires ytstats 0.7.0+.
+
 ### reach and reach-jobs
 
 ```bash
@@ -222,4 +261,4 @@ Also at `meta.exitCode`, so a consumer reading only stdout still knows.
 
 ## Quota
 
-The Data API allows 10,000 units/day per Google Cloud project. A full `fetch` for a 100-video channel costs roughly 5 units, because the uploads playlist (1 unit per 50 videos) is used instead of `search.list` (100 units per call). Retention costs one call per video. The Analytics and Reporting APIs have separate quotas.
+The Data API allows 10,000 units/day per Google Cloud project. A full `fetch` for a 100-video channel costs roughly 5 units, because the uploads playlist (1 unit per 50 videos) is used instead of `search.list` (100 units per call). Retention costs one call per video. `transcript` is the expensive one: `captions.download` is **200 units** and `captions.list` is 50, so an uncached transcript costs 250 — roughly 40 a day. The Analytics and Reporting APIs have separate quotas.

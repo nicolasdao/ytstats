@@ -21,6 +21,7 @@ Respect both and you never loop pointlessly. `recoverable: false` means stop. `r
 | `AUTH_TOKEN_REVOKED` | Access revoked in Google account settings or by a logout elsewhere. Re-login |
 | `AUTH_ACCOUNT_UNKNOWN` | The `--account` selector matched nothing. `context.allowed` lists the valid channel ids. Never retry with a guess — show the user the list |
 | `AUTH_CLIENT_MISMATCH` | This channel's token was issued by a different OAuth client than the one now resolving. See below |
+| `AUTH_SCOPE_MISSING` | Signed in without caption access, and `transcript` needs it. Run `ytstats login --with-captions` — see below. **Not retryable**: the same command cannot help until the user re-authorizes |
 | `AUTH_CONSENT_DECLINED` | Consent dismissed or a scope refused. **Retryable** — offer to run `login` again |
 | `AUTH_TIMEOUT` | The callback never arrived. Usually Google showed "Access blocked" in the browser, which a retry cannot fix. Check the OAuth client, not the network |
 | `AUTH_CLIENT_ID_INVALID` | Client ID does not end in `.apps.googleusercontent.com`. Also consider the client being **gone** — see below |
@@ -29,6 +30,24 @@ Respect both and you never loop pointlessly. `recoverable: false` means stop. `r
 | `AUTH_CREDENTIALS_MALFORMED` | The file opened but is not the JSON Google produces for an OAuth client. Usually the wrong file entirely, or a truncated download |
 | `AUTH_NO_CHANNEL` | The Google account authorized successfully but owns no YouTube channel |
 | `AUTH_STATE_MISMATCH` | CSRF check failed — stale browser tab or another process on the port. **Retryable** |
+
+### AUTH_SCOPE_MISSING specifically
+
+Only `transcript` raises this. The fix is one command:
+
+```bash
+ytstats login --with-captions
+```
+
+Three things to tell the user, because the consent screen is alarming if unexplained:
+
+1. **It re-opens the browser.** This is a real sign-in, not a background step.
+2. **Google will say "Manage your YouTube account".** That wording is unavoidable — `youtube.force-ssl` is the *only* scope that can read captions, and Google offers no read-only variant. `ytstats` never writes to a channel.
+3. **Nothing already granted is lost.** Permissions are added incrementally, not replaced.
+
+Ask before running it. It is not destructive like `logout`, but it takes over the user's browser and asks them to approve a permission that sounds broader than it is — so they should be expecting it.
+
+**Never infer this from a `null`.** `ytstats status` reports `scopes` per account, and `null` means the grant was never recorded (an older sign-in), not that permission is absent. The CLI itself only raises `AUTH_SCOPE_MISSING` when the recorded list is present and genuinely lacks the scope; for a `null` it attempts the call. Do not tell a user to re-authorize on the strength of a `null` — let the command decide.
 
 ### AUTH_CLIENT_MISMATCH specifically
 

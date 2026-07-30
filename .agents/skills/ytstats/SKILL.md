@@ -35,7 +35,7 @@ Branch on `.ok`. On failure, `data` is `null` — never partial — and `.errors
 
 Never parse the prose. `code` is the public contract; the wording is not.
 
-### `.data` has four shapes — check which one you are holding
+### `.data` has several shapes — check which one you are holding
 
 | Command | `.data` is | Get rows with |
 |---|---|---|
@@ -43,6 +43,7 @@ Never parse the prose. `code` is the public contract; the wording is not.
 | `videos` | a bare array | `.data` |
 | `channel` | the channel object | `.data.subscriberCount` |
 | `retention` | `{videoId, period, curve}` | `.data.curve` |
+| `transcript` | `{videoId, trackId, language, trackKind, lastUpdated, cachedAt, cues}` | `.data.cues` |
 | `reports` | `{available, active, missing, jobs, jobCount, coverage}` | `.data.missing` |
 | `sync` | `{jobs, downloaded, skipped, rows, byType, failed, dataDir, note}` | `.data.downloaded` |
 | `archive` | `{dataDir, reportTypes, totalRows, ingestedReports}` | `.data.reportTypes` |
@@ -85,6 +86,7 @@ The config directory is handled by the CLI itself — `%APPDATA%\ytstats\` on Wi
 | "where do people watch" | `playback-locations` |
 | "best performing videos this period" | `video-analytics` |
 | "where do viewers drop off", "retention" | `retention <videoId>` |
+| "what did I say at the drop-off", "transcript", "what was said", "subtitles" | `transcript <videoId>` — needs `login --with-captions` |
 | "CTR", "thumbnail performance", "impressions" | `reach` — read the async caveat first |
 | "am I collecting everything", "what data am I missing" | `reports` |
 | "start collecting everything", "fix the missing reports" | `reports-enable --all` |
@@ -94,6 +96,7 @@ The config directory is handled by the CLI itself — `%APPDATA%\ytstats\` on Wi
 | "am I logged in", "which channel", "who am I" | `status` |
 | "something is broken", "why doesn't this work" | `doctor` |
 | "log in", "connect my account" | `login` |
+| "let me read transcripts", "enable captions" | `login --with-captions` — confirm first, it opens the browser |
 | "log out", "disconnect" | `logout` — **confirm first** |
 | "switch channel", "use my other channel" | `use <channelId or @handle>` |
 
@@ -136,7 +139,9 @@ Two flags cost real quota: `--reach` adds Reporting API calls, and retention cos
 
 `logout` revokes the refresh token with Google and deletes it locally. Getting back in needs the browser flow again.
 
-Always confirm with AskUserQuestion before running it, including which account and whether `--all` or `--forget-credentials` is intended. This is the only command that requires a confirmation — `login`, `use`, and `status` run directly.
+Always confirm with AskUserQuestion before running it, including which account and whether `--all` or `--forget-credentials` is intended.
+
+`login --with-captions` also needs a check first, for a different reason: it takes over the browser and asks the user to approve a permission Google labels "Manage your YouTube account". Nothing is destroyed if they decline, but they should be expecting it and should know the CLI only reads with it. Plain `login`, `use`, and `status` run directly.
 
 ## When something fails
 
@@ -155,6 +160,26 @@ The three that bite hardest:
 - **`impressionsCtr` is a fraction.** `0.0561` is **5.61%**. Multiply by 100.
 - **Retention ratios above 1.0 are correct** — viewers looped that moment. Never clamp, never call it a bug.
 - **Empty is not failed.** `rows: []` with `ok: true` and a `DATA_EMPTY` warning means the channel genuinely had no activity. In a `fetch`, an empty dataset named in `data.warnings[]` means that step failed, which is different again.
+
+## Pairing a transcript with a retention curve
+
+This is the analysis `transcript` exists for, and the join is the caller's job — `ytstats` deliberately emits the two primitives separately rather than guessing how to correlate them.
+
+The units differ, which is the whole trap:
+
+| Source | Time is |
+|---|---|
+| `retention` → `.data.curve[].position` | a **fraction of the video**, `0`–`1` |
+| `transcript` → `.data.cues[].start` | **seconds** |
+
+So converting needs the video's duration, from `ytstats videos` (`durationSeconds`):
+
+```bash
+ytstats videos 2>/dev/null | jq -r '.data[] | select(.id=="VIDEO_ID") | .durationSeconds'
+# cue at t seconds sits at position t / durationSeconds
+```
+
+Read the drop-off first and the text second: find the points where `stoppedWatching` is high, convert those positions to seconds, then quote what was being said there. Reporting the dip without the words is half an answer; quoting the words without checking `stoppedWatching` versus `startedWatching` risks blaming a line for a drop that was actually viewers skipping an intro.
 
 ## Data YouTube is not collecting — raise this unprompted
 
@@ -214,6 +239,9 @@ Use `archive` to answer "how far back does my data go" — `firstDate` per repor
 - **NEVER** retry a command whose diagnostic says `retryable: false`, or continue at all when `recoverable: false`.
 - **NEVER** fall back to another channel when `--account` fails with `AUTH_ACCOUNT_UNKNOWN` — show the user the channels in `context.allowed`.
 - **NEVER** print a full `fetch` document into the conversation. Redirect to a file and query it.
+- **NEVER** quote an `ASR` transcript as the creator's exact words — speech recognition mishears names and jargon. Say which kind of track it came from (`trackKind`).
+- **NEVER** loop `transcript` over a whole channel. It is 250 quota units uncached, against 10,000/day.
+- **NEVER** tell a user they lack caption permission because `scopes` is `null` — `null` means unrecorded, not absent.
 - **NEVER** branch on diagnostic prose. Branch on `code`.
 - **ALWAYS** capture with `2>/dev/null` — stderr is progress noise, stdout is the data.
 - **ALWAYS** check `data.warnings[]` in a `fetch` result before calling a dataset empty or a run clean.
