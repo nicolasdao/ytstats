@@ -27,7 +27,7 @@ export {
   clearAllAccounts,
   migrateLegacyTokens,
 } from './auth/tokens.js';
-export { SCOPES } from './auth/oauth.js';
+export { SCOPES, CAPTIONS_SCOPE } from './auth/oauth.js';
 
 export { createApis } from './api/client.js';
 export * as data from './api/data.js';

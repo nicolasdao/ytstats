@@ -186,6 +186,7 @@ export function buildProgram(deps = {}) {
     .description('sign in to YouTube with your own Google Cloud OAuth client')
     .option('-c, --client-secret <path>', 'path to the client_secret JSON downloaded from Google Cloud')
     .option('--no-browser', 'print the URL and paste the redirect back (headless/SSH)')
+    .option('--with-captions', 'also request caption access, needed by `ytstats transcript` (write-capable scope)')
     .option('--timeout <seconds>', 'how long to wait for the browser callback', '300')
     .action(run('login', async (cmdOpts, globalOpts) => {
       const credentials = resolveCredentials({ clientSecretPath: cmdOpts.clientSecret });
@@ -196,9 +197,17 @@ export function buildProgram(deps = {}) {
       const idWarning = validateClientId(credentials.clientId);
       if (idWarning) reporter.warn(idWarning);
 
+      if (cmdOpts.withCaptions) {
+        reporter.progress(
+          'Requesting caption access as well. Google will describe this as managing your ' +
+          'YouTube account — it is the only scope captions have, and ytstats uses it to read.',
+        );
+      }
+
       const identity = await session.login({
         credentials,
         noBrowser: !cmdOpts.browser,
+        withCaptions: Boolean(cmdOpts.withCaptions),
         timeoutMs: Number(cmdOpts.timeout) * 1000,
         deps: { log: msg => reporter.progress(msg) },
       });

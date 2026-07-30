@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
-import { createPkcePair, buildAuthUrl, startLoopbackServer, SCOPES } from '../../src/auth/oauth.js';
+import { createPkcePair, buildAuthUrl, startLoopbackServer, SCOPES, CAPTIONS_SCOPE } from '../../src/auth/oauth.js';
 import { ERROR_CODES } from '../../src/errors.js';
 
 const base64url = buf => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -67,6 +67,38 @@ describe('buildAuthUrl', () => {
     const scope = params().searchParams.get('scope');
     expect(scope.split(' ').sort()).toEqual([...SCOPES].sort());
     expect(scope).not.toMatch(/force-ssl|upload|partner/);
+  });
+
+  it('enables incremental authorization, so adding a scope later keeps the old ones', () => {
+    // What makes the opt-in captions scope additive rather than a replacement.
+    expect(params().searchParams.get('include_granted_scopes')).toBe('true');
+  });
+
+  it('carries the captions scope only when it is passed explicitly', () => {
+    const url = new URL(buildAuthUrl({
+      clientId: 'cid.apps.googleusercontent.com',
+      redirectUri: 'http://127.0.0.1:12345',
+      state: 'st-123',
+      codeChallenge: 'chal-abc',
+      scopes: [...SCOPES, CAPTIONS_SCOPE],
+    }));
+    const scope = url.searchParams.get('scope');
+    expect(scope).toContain('youtube.force-ssl');
+    expect(scope.split(' ')).toHaveLength(4);
+  });
+});
+
+describe('the captions scope stays out of the default grant', () => {
+  it('keeps SCOPES at exactly the three read-only entries', () => {
+    // Widening the default would break the read-only promise for every existing
+    // user and force them all to re-authorize.
+    expect(SCOPES).toHaveLength(3);
+    expect(SCOPES).not.toContain(CAPTIONS_SCOPE);
+    expect(SCOPES.every(s => s.includes('readonly'))).toBe(true);
+  });
+
+  it('is force-ssl, because captions have no read-only scope', () => {
+    expect(CAPTIONS_SCOPE).toBe('https://www.googleapis.com/auth/youtube.force-ssl');
   });
 });
 

@@ -3,7 +3,7 @@ import { google } from 'googleapis';
 import open from 'open';
 import { resolveCredentials, saveCredentials, clearCredentials, validateClientId } from './credentials.js';
 import { saveAccount, loadAccount, removeAccount, clearAllAccounts, listAccounts } from './tokens.js';
-import { createPkcePair, createState, buildAuthUrl, startLoopbackServer, SCOPES } from './oauth.js';
+import { createPkcePair, createState, buildAuthUrl, startLoopbackServer, SCOPES, CAPTIONS_SCOPE } from './oauth.js';
 import { YtStatsError, ERROR_CODES, mapGoogleError, fail } from '../errors.js';
 import { DIAGNOSTICS } from '../diagnostics.js';
 
@@ -117,11 +117,15 @@ export function getAuthenticatedClient({ account: selector, clientSecretPath, en
  * Interactive login. Default path opens the browser and captures the callback on
  * 127.0.0.1; `noBrowser` falls back to printing the URL and reading the pasted
  * redirect (for SSH/headless).
+ *
+ * `withCaptions` adds the opt-in captions scope, which is write-capable. It is
+ * never implied — only an explicit --with-captions asks for it.
  */
 export async function login({
   credentials: provided,
   clientSecretPath,
   noBrowser = false,
+  withCaptions = false,
   env,
   cwd,
   timeoutMs,
@@ -129,6 +133,7 @@ export async function login({
 } = {}) {
   const deps = { ...defaultDeps(), ...injected };
   const credentials = provided ?? resolveCredentials({ clientSecretPath, env, cwd });
+  const scopes = withCaptions ? [...SCOPES, CAPTIONS_SCOPE] : SCOPES;
 
   // Validate before opening a browser. Google does not reject a bad client ID via
   // the API — it renders "Access blocked" in the browser and never redirects, so
@@ -140,8 +145,8 @@ export async function login({
   const state = createState();
 
   const { code, redirectUri } = noBrowser
-    ? await pasteFlow({ deps, credentials, state, challenge })
-    : await browserFlow({ deps, credentials, state, challenge, timeoutMs });
+    ? await pasteFlow({ deps, credentials, state, challenge, scopes })
+    : await browserFlow({ deps, credentials, state, challenge, timeoutMs, scopes });
 
   const client = newClient(deps, credentials, redirectUri);
 
@@ -185,7 +190,7 @@ export async function login({
   return identity;
 }
 
-async function browserFlow({ deps, credentials, state, challenge, timeoutMs }) {
+async function browserFlow({ deps, credentials, state, challenge, timeoutMs, scopes = SCOPES }) {
   const server = await deps.startLoopbackServer({ state, timeoutMs });
   try {
     const authUrl = buildAuthUrl({
@@ -193,7 +198,7 @@ async function browserFlow({ deps, credentials, state, challenge, timeoutMs }) {
       redirectUri: server.redirectUri,
       state,
       codeChallenge: challenge,
-      scopes: SCOPES,
+      scopes,
     });
 
     deps.log('Opening your browser to sign in with Google...');
@@ -207,7 +212,7 @@ async function browserFlow({ deps, credentials, state, challenge, timeoutMs }) {
   }
 }
 
-async function pasteFlow({ deps, credentials, state, challenge }) {
+async function pasteFlow({ deps, credentials, state, challenge, scopes = SCOPES }) {
   // No loopback listener here, so Google's redirect will simply fail to load and
   // the user copies the URL out of the address bar.
   const redirectUri = 'http://127.0.0.1:1';
@@ -216,7 +221,7 @@ async function pasteFlow({ deps, credentials, state, challenge }) {
     redirectUri,
     state,
     codeChallenge: challenge,
-    scopes: SCOPES,
+    scopes,
   });
 
   deps.log('Open this URL in any browser, approve access, then copy the URL you land on:\n');

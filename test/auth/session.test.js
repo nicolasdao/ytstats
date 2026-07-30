@@ -215,6 +215,48 @@ describe('login', () => {
     expect(loadAccount('UC-abc').scopes).toBeNull();
   });
 
+  it('requests the captions scope only when --with-captions is used', async () => {
+    const d = deps();
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      withCaptions: true,
+      deps: d,
+    });
+    const scope = new URL(d.openBrowser.mock.calls[0][0]).searchParams.get('scope');
+    expect(scope).toContain('youtube.force-ssl');
+    expect(scope.split(' ')).toHaveLength(4);
+  });
+
+  it('never requests the captions scope by default', async () => {
+    // The read-only guarantee: an ordinary login must not quietly acquire write access.
+    const d = deps();
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      deps: d,
+    });
+    const scope = new URL(d.openBrowser.mock.calls[0][0]).searchParams.get('scope');
+    expect(scope).not.toContain('force-ssl');
+    expect(scope.split(' ')).toHaveLength(3);
+  });
+
+  it('carries the captions scope through the --no-browser flow too', async () => {
+    // The paste flow builds its own auth URL, so it is a second place the scope
+    // list has to reach — and the one a headless user hits.
+    const logged = [];
+    const d = deps({
+      log: msg => logged.push(msg),
+      promptForRedirectUrl: vi.fn(async () => 'http://127.0.0.1:1/?code=pasted-code'),
+    });
+    await login({
+      credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' },
+      noBrowser: true,
+      withCaptions: true,
+      deps: d,
+    });
+    const authUrl = logged.find(m => m.includes('accounts.google.com'));
+    expect(new URL(authUrl.trim()).searchParams.get('scope')).toContain('youtube.force-ssl');
+  });
+
   it('opens the browser at Google, not at the loopback server', async () => {
     const d = deps();
     await login({ credentials: { clientId: '123456789012-abc123def456.apps.googleusercontent.com', clientSecret: 'sec' }, deps: d });

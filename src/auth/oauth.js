@@ -4,12 +4,30 @@ import { URL } from 'node:url';
 import { YtStatsError, ERROR_CODES, fail } from '../errors.js';
 import { DIAGNOSTICS } from '../diagnostics.js';
 
-/** Read-only scopes only. ytstats never requests write access to a channel. */
+/**
+ * The DEFAULT grant: read-only scopes only. Nothing here can modify a channel,
+ * and this is what `ytstats login` requests unless the user opts into more.
+ *
+ * Do not add CAPTIONS_SCOPE to this list. Read-only is the promise every existing
+ * user consented to, and widening the default would silently break it for all of
+ * them — as well as forcing everyone to re-authorize, since a new scope
+ * invalidates existing consent.
+ */
 export const SCOPES = Object.freeze([
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/yt-analytics.readonly',
   'https://www.googleapis.com/auth/yt-analytics-monetary.readonly',
 ]);
+
+/**
+ * OPT-IN only, requested by `ytstats login --with-captions` and nothing else.
+ *
+ * Captions have no read-only scope: both captions.list and captions.download
+ * require youtube.force-ssl, which Google presents as "Manage your YouTube
+ * account" — full read/write. That is why it is separate rather than a fourth
+ * default, and why `transcript` is the only feature that needs it.
+ */
+export const CAPTIONS_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
