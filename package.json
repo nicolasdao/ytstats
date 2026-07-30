@@ -1,6 +1,6 @@
 {
   "name": "ytstats",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Pull your YouTube channel stats and analytics as JSON. Bring your own Google Cloud credentials, no server, no data leaves your machine.",
   "type": "module",
   "bin": {

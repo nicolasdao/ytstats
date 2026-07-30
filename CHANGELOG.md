@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-30
+
 ### Added
 
 - `ytstats reports` and `ytstats reports-enable` — audit and close the Reporting
@@ -64,6 +66,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   download is retried on the next run rather than skipped forever — the report is
   gone in 60 days and a retry is the only chance to get it. Progress is persisted
   even when a run aborts partway.
+- **Upgrade impact:** `doctor` now reports `data.healthy: false` on installs where
+  it previously reported `true`, because the two new checks surface a condition
+  that was always present and never visible. `data.checks` also grew from 7 to 9
+  entries — consumers reading it by position rather than by `id` will shift. No
+  envelope key, diagnostic code, command, or exit code changed.
 
 ## [0.5.0] - 2026-07-29
 
@@ -220,7 +227,8 @@ Initial release.
 - Client ID pre-flight validation, so a malformed OAuth client fails immediately
   instead of hanging until the browser callback times out.
 
-[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nicolasdao/ytstats/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/nicolasdao/ytstats/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/nicolasdao/ytstats/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/nicolasdao/ytstats/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/nicolasdao/ytstats/compare/v0.2.1...v0.3.0
