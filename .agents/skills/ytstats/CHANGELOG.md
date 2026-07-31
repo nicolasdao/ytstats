@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.1] - 2026-07-31
+
+### Changed
+- Require `ytstats` 0.8.1 or newer, up from 0.8.0. On 0.8.0 and earlier, `retention` returned an **empty curve for every video** on a channel whose drop-off metrics YouTube refuses — `ok: true`, `curve: []`, no warning — because the refusal arrives as HTTP 200 with zero rows and the metric fallback only recognised explicit errors. An agent on 0.8.0 would tell a user their videos have no retention data when they have years of it, and would silently fail the transcript-vs-retention analysis that is this skill's headline use case. Third floor raise for the same reason (0.2.1 CTR, 0.7.1 transcript): the guidance is only true from the version that ships the fix.
+
+### Added
+- A rule for reading an empty retention curve, mirroring the existing empty-transcript rule: check `meta.version` first, and on 0.8.1+ trust `curve: []` only when it carries a `DATA_EMPTY` warning.
+- The distinction between "no retention data" and "no drop-off attribution". A channel that refuses `startedWatching`/`stoppedWatching` still returns a full, usable curve with `ratio` and `relativeRetentionPerformance`; describing that video as having no retention data is wrong and discards the analysis the user asked for.
+
 ## [0.9.0] - 2026-07-30
 
 ### Added

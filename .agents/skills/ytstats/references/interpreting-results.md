@@ -90,6 +90,16 @@ The CLI prefers an author-written track and falls back to ASR, but it always rep
 
 This matters most in exactly the case the feature is for: explaining a retention drop-off. Recommending someone cut a line that they never actually said is worse than saying nothing.
 
+## An empty retention curve before ytstats 0.8.1 is a bug, not a video without data
+
+If `retention` returns `curve: []`, check `meta.version` before saying anything. On **0.8.0 and earlier** the command returned an empty curve — `ok: true`, no warning — for every video on a channel whose drop-off metrics YouTube refuses, because the refusal arrives as HTTP 200 with zero rows and the metric fallback only recognised explicit errors. A channel with years of retention data looked like one with none.
+
+Tell the user to upgrade (`npx ytstats@latest`); do not report "this video has no retention data". Same class as the 0.7.0 transcript bug below, on the command next door.
+
+From 0.8.1 an empty curve is trustworthy **and** carries a `DATA_EMPTY` warning. If you see `curve: []` *with* that warning on 0.8.1+, the video genuinely has no retention data for the window — usually too few views, or a window that predates the video.
+
+Related: on a channel that refuses the drop-off counts you will get a full curve with `startedWatching` and `stoppedWatching` `null` and an `ANALYTICS_METRICS_UNSUPPORTED` warning naming them. The curve is real and usable — `ratio` and `relativeRetentionPerformance` are there. Do not describe the video as having no retention data; describe it as having no *drop-off attribution*, which is the narrower and correct claim.
+
 ## An empty transcript on ytstats 0.7.0 is a bug, not a silent video
 
 If `transcript` returns `cues: []` with a `DATA_EMPTY` warning, check `meta.version` before telling the user anything. On **0.7.0** the command returned zero cues for *every* video — the caption body was read as a string when the API returns a Blob — so an empty result there says nothing about the video. Tell the user to upgrade (`npx ytstats@latest`), do not report "this video has no captions".
