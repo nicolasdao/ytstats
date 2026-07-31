@@ -281,10 +281,118 @@ describe('Analytics API — metric degradation', () => {
       { videoId: 'v1', startDate: 'a', endDate: 'b', onDegraded: m => dropped.push(...m) },
     );
 
-    expect(calls).toHaveLength(3);
+    // Four tiers: the third keeps the peer comparison when only the drop-off
+    // counts are refused, so exhausting the list to bare audienceWatchRatio
+    // now takes four calls rather than three.
+    expect(calls).toHaveLength(4);
+    expect(calls.at(-1).metrics).toBe('audienceWatchRatio');
     expect(rows[0].ratio).toBe(0.9);
     expect(rows[0].stoppedWatching).toBeNull();
     expect(dropped).toContain('stoppedWatching');
+  });
+
+  /**
+   * CAPTURED VERBATIM on 2026-07-31: the response to the richest retention tier on
+   * a live channel. HTTP 200, full columnHeaders, and `rows: []` — a refusal that
+   * arrives as a success. Do not "simplify" this to a thrown error; the empty-body
+   * shape IS the bug this fixture exists to pin.
+   */
+  const REAL_EMPTY_RETENTION = {
+    kind: 'youtubeAnalytics#resultTable',
+    columnHeaders: [
+      { name: 'elapsedVideoTimeRatio', columnType: 'DIMENSION', dataType: 'FLOAT' },
+      { name: 'audienceWatchRatio', columnType: 'METRIC', dataType: 'FLOAT' },
+      { name: 'relativeRetentionPerformance', columnType: 'METRIC', dataType: 'FLOAT' },
+      { name: 'startedWatching', columnType: 'METRIC', dataType: 'INTEGER' },
+      { name: 'stoppedWatching', columnType: 'METRIC', dataType: 'INTEGER' },
+      { name: 'totalSegmentImpressions', columnType: 'METRIC', dataType: 'FLOAT' },
+    ],
+    rows: [],
+  };
+
+  /** CAPTURED VERBATIM, same session: the tier that did return rows. */
+  const REAL_RETENTION_ROWS = {
+    kind: 'youtubeAnalytics#resultTable',
+    columnHeaders: [
+      { name: 'elapsedVideoTimeRatio', columnType: 'DIMENSION', dataType: 'FLOAT' },
+      { name: 'audienceWatchRatio', columnType: 'METRIC', dataType: 'FLOAT' },
+      { name: 'relativeRetentionPerformance', columnType: 'METRIC', dataType: 'FLOAT' },
+      { name: 'totalSegmentImpressions', columnType: 'METRIC', dataType: 'FLOAT' },
+    ],
+    rows: [
+      [0.01, 0.9401999999999999, 0.2757, 110],
+      [0.02, 0.9223, 0.2831, 110],
+    ],
+  };
+
+  it('treats a zero-row tier as a refusal and keeps descending', async () => {
+    // The failure this prevents: YouTube refuses startedWatching/stoppedWatching
+    // with HTTP 200 and no rows rather than an error, so the richest tier "succeeds"
+    // empty. Reporting that as the answer said "this video has no retention data"
+    // for every video on a channel that had plenty.
+    const { analytics, calls } = analyticsApi(params =>
+      (params.metrics.includes('stoppedWatching')
+        ? { data: REAL_EMPTY_RETENTION }
+        : { data: REAL_RETENTION_ROWS }));
+
+    const dropped = [];
+    const rows = await fetchAudienceRetention(
+      { analytics },
+      { videoId: 'v1', startDate: 'a', endDate: 'b', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0].ratio).toBe(0.9401999999999999);
+    expect(rows[0].relativeRetentionPerformance).toBe(0.2757);
+    expect(rows[0].totalSegmentImpressions).toBe(110);
+    // The two it could not serve are reported, and read as unknown rather than zero.
+    expect(dropped).toEqual(expect.arrayContaining(['startedWatching', 'stoppedWatching']));
+    expect(rows[0].stoppedWatching).toBeNull();
+    expect(calls.length).toBeGreaterThan(1);
+  });
+
+  it('returns empty without claiming degradation when every tier is empty', async () => {
+    // A genuinely empty dataset must not produce a warning naming metrics that were
+    // never the problem — that would train callers to ignore the warning.
+    const { analytics } = analyticsApi(() => ({ data: REAL_EMPTY_RETENTION }));
+    const dropped = [];
+    const rows = await fetchAudienceRetention(
+      { analytics },
+      { videoId: 'v1', startDate: 'a', endDate: 'b', onDegraded: m => dropped.push(...m) },
+    );
+
+    expect(rows).toEqual([]);
+    expect(dropped).toEqual([]);
+  });
+
+  it('keeps the peer comparison when only the drop-off counts are refused', async () => {
+    // Falling straight to bare audienceWatchRatio would throw away
+    // relativeRetentionPerformance and totalSegmentImpressions for no reason.
+    const { analytics, calls } = analyticsApi(params =>
+      (params.metrics.includes('stoppedWatching')
+        ? { data: REAL_EMPTY_RETENTION }
+        : { data: REAL_RETENTION_ROWS }));
+
+    await fetchAudienceRetention({ analytics }, { videoId: 'v1', startDate: 'a', endDate: 'b' });
+
+    const accepted = calls.at(-1).metrics;
+    expect(accepted).toContain('relativeRetentionPerformance');
+    expect(accepted).toContain('totalSegmentImpressions');
+    expect(accepted).not.toBe('audienceWatchRatio');
+  });
+
+  it('an empty tier never overrides a real error from a later one', async () => {
+    // Empty-then-403 must surface the 403, not a silent empty result.
+    const forbidden = { response: { status: 403, data: { error: { message: 'Forbidden' } } } };
+    const { analytics } = analyticsApi(params => {
+      if (params.metrics.includes('stoppedWatching')) return { data: REAL_EMPTY_RETENTION };
+      throw forbidden;
+    });
+
+    const err = await fetchAudienceRetention(
+      { analytics }, { videoId: 'v1', startDate: 'a', endDate: 'b' },
+    ).catch(e => e);
+    expect(err.code).toBe(ERROR_CODES.ACCESS_DENIED);
   });
 
   it('rethrows a failure that is not about metric support', async () => {

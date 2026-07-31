@@ -79,7 +79,7 @@ const isUnsupported = err =>
   err?.code === ERROR_CODES.QUERY_NOT_SUPPORTED || err?.diagnostic?.code === 'API_QUERY_NOT_SUPPORTED';
 
 /**
- * Run a query against progressively smaller metric sets until one is accepted.
+ * Run a query against progressively smaller metric sets until one returns data.
  *
  * Which metrics a channel supports varies, and an unsupported one fails the whole
  * query rather than returning a null column. Requesting a newer metric such as
@@ -87,24 +87,55 @@ const isUnsupported = err =>
  * dataset for anyone whose channel rejects it — so every addition is a tier that
  * falls back to the set already known to work.
  *
- * Tiers are ordered richest first; the last is the historical metric list and its
- * failure is a real error, rethrown untouched.
+ * **A rejection is not always an error.** Some metric combinations are refused with
+ * HTTP 200 and an empty `rows` array instead of `The query is not supported.`
+ * Retention is the case that proved it: on a live channel, asking for
+ * `startedWatching`/`stoppedWatching` alongside the rest returned zero rows, while
+ * `audienceWatchRatio` alone returned 100 — so treating the first success as
+ * authoritative reported "this video has no retention data" for every video on the
+ * channel, with ok: true and no warning. Requesting those two metrics on their own
+ * errors outright, which is how the silent variant was found.
+ *
+ * An empty tier is therefore treated as a degradation signal, not an answer: keep
+ * descending, and if a thinner tier returns rows, use it and report what was
+ * dropped. When every tier is empty the dataset is genuinely empty — return the
+ * richest response so the columns still describe what was asked, and report no
+ * degradation, because nothing was actually lost.
+ *
+ * Tiers are ordered richest first; the last one's failure is a real error, rethrown
+ * untouched.
  */
 async function queryTiered(apis, params, tiers, onDegraded) {
   const full = tiers[0].split(',');
+  let firstEmpty = null;
 
   for (const [i, metrics] of tiers.entries()) {
+    let data;
     try {
-      const data = await query(apis, { ...params, metrics });
+      data = await query(apis, { ...params, metrics });
+    } catch (err) {
+      // A non-support error must never be downgraded into "degraded data" — a 403
+      // or a network failure is an auth problem, not a thinner dataset.
+      if (!isUnsupported(err)) throw err;
+      if (i === tiers.length - 1) {
+        if (firstEmpty) return firstEmpty;
+        throw err;
+      }
+      continue;
+    }
+
+    if (data?.rows?.length) {
       if (i > 0) {
         const kept = new Set(metrics.split(','));
         onDegraded?.(full.filter(m => !kept.has(m)));
       }
       return data;
-    } catch (err) {
-      if (i === tiers.length - 1 || !isUnsupported(err)) throw err;
     }
+
+    firstEmpty ??= data;
   }
+
+  return firstEmpty;
 }
 
 /**
@@ -403,10 +434,18 @@ export async function fetchTrafficSourceDetails(apis, { startDate, endDate, sour
  *
  * relativeRetentionPerformance is the most frequently unavailable (it needs a peer
  * set), so it gets its own tier and is dropped before the segment counts are.
+ *
+ * The reverse case is real too, and costs more: a channel can serve
+ * relativeRetentionPerformance while refusing the drop-off counts. Verified live on
+ * 2026-07-31 — `startedWatching` or `stoppedWatching` on their own return
+ * `An internal error has occurred.`, and folded into a larger set they return zero
+ * rows rather than an error. Without the third tier such a channel falls all the
+ * way to bare audienceWatchRatio and loses the peer comparison for no reason.
  */
 const RETENTION_TIERS = [
   'audienceWatchRatio,relativeRetentionPerformance,startedWatching,stoppedWatching,totalSegmentImpressions',
   'audienceWatchRatio,startedWatching,stoppedWatching,totalSegmentImpressions',
+  'audienceWatchRatio,relativeRetentionPerformance,totalSegmentImpressions',
   'audienceWatchRatio',
 ];
 

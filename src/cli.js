@@ -723,6 +723,15 @@ export function buildProgram(deps = {}) {
         dropped: dropped.join(', '),
       }));
     }
+    // Every simple() command says so when a query returns nothing; this one did
+    // not, so an empty curve was indistinguishable from a working one — the
+    // failure that hid a channel-wide retention outage behind ok: true.
+    if (curve.length === 0) {
+      reporter.warn(diagnose(DIAGNOSTICS.DATA_EMPTY, {
+        step: 'retention',
+        detail: `No retention data for ${videoId} in ${range.startDate}..${range.endDate}`,
+      }));
+    }
     return { videoId, period: range, curve };
   }));
 

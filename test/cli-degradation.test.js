@@ -113,4 +113,31 @@ describe('dataset commands report a dropped metric', () => {
     expect(warning.detail).toMatch(/stoppedWatching/);
     expect(env.data.curve[0].ratio).toBe(0.9);
   });
+
+  it('retention says so when the curve is empty', async () => {
+    // Every simple() command emits DATA_EMPTY on zero rows; retention is built by
+    // hand and did not, so an empty curve looked exactly like a working one. That
+    // is how a channel-wide retention outage stayed invisible behind ok: true.
+    const { program, envelope } = harness({
+      query: vi.fn(async () => resp(['elapsedVideoTimeRatio', 'audienceWatchRatio'], [])),
+    });
+    await program.parseAsync(['node', 'ytstats', 'retention', 'vid123', '--days', '7']);
+
+    const env = envelope();
+    expect(env.ok).toBe(true);
+    expect(env.data.curve).toEqual([]);
+    const empty = env.warnings.find(w => w.code === 'DATA_EMPTY');
+    expect(empty).toBeDefined();
+    expect(empty.context.step).toBe('retention');
+    expect(empty.detail).toMatch(/vid123/);
+  });
+
+  it('a curve with rows raises no DATA_EMPTY', async () => {
+    const { program, envelope } = harness({
+      query: vi.fn(async () => resp(['elapsedVideoTimeRatio', 'audienceWatchRatio'], [[0, 0.9]])),
+    });
+    await program.parseAsync(['node', 'ytstats', 'retention', 'vid123', '--days', '7']);
+
+    expect(envelope().warnings.map(w => w.code)).not.toContain('DATA_EMPTY');
+  });
 });
