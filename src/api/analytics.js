@@ -1,5 +1,5 @@
 import { call } from './client.js';
-import { ERROR_CODES } from '../errors.js';
+import { ERROR_CODES, YtStatsError } from '../errors.js';
 import { rowsFromAnalytics } from './transforms.js';
 
 /**
@@ -183,25 +183,102 @@ export async function fetchDailyAnalytics(apis, { startDate, endDate, segment, o
   }));
 }
 
-/** Card/annotation metrics. Degrades to [] — some channels never have this data. */
+/**
+ * Card/annotation metrics. Degrades to [] — some channels never have this data.
+ *
+ * The teaser and annotation counters were verified accepted on 2026-07-31, but the
+ * probed channel uses no cards, so every value came back 0. A zero here is therefore
+ * only trustworthy if the channel actually uses cards — treat empty as unknown, as
+ * the gotchas file says, and note this fetcher swallows its own failures so no
+ * warning reaches the envelope.
+ */
+const CARD_METRICS = [
+  'cardImpressions', 'cardClicks', 'cardClickRate',
+  'cardTeaserImpressions', 'cardTeaserClicks', 'cardTeaserClickRate',
+  'annotationImpressions', 'annotationClickableImpressions', 'annotationClicks',
+  'annotationClickThroughRate', 'annotationCloseRate',
+].join(',');
+
 export async function fetchCardMetrics(apis, { startDate, endDate }) {
   try {
-    const data = await query(apis, {
-      startDate,
-      endDate,
-      metrics: 'views,annotationClickThroughRate,cardClicks,cardImpressions',
-      dimensions: 'day',
-      sort: 'day',
-    });
+    const data = await queryTiered(
+      apis,
+      { startDate, endDate, dimensions: 'day', sort: 'day' },
+      [`views,${CARD_METRICS}`, 'views,annotationClickThroughRate,cardClicks,cardImpressions'],
+    );
     return rowsFromAnalytics(data).map(r => ({
       date: r.day,
-      annotationClickThroughRate: num(r.annotationClickThroughRate),
-      cardClicks: num(r.cardClicks),
       cardImpressions: num(r.cardImpressions),
+      cardClicks: num(r.cardClicks),
+      cardClickRate: num(r.cardClickRate),
+      cardTeaserImpressions: num(r.cardTeaserImpressions),
+      cardTeaserClicks: num(r.cardTeaserClicks),
+      cardTeaserClickRate: num(r.cardTeaserClickRate),
+      annotationImpressions: num(r.annotationImpressions),
+      annotationClickableImpressions: num(r.annotationClickableImpressions),
+      annotationClicks: num(r.annotationClicks),
+      annotationClickThroughRate: num(r.annotationClickThroughRate),
+      annotationCloseRate: num(r.annotationCloseRate),
     }));
   } catch {
     return [];
   }
+}
+
+/**
+ * Per-playlist performance. The `playlist` dimension is accepted but returned zero
+ * rows on the probed channel (2026-07-31), which has no playlist traffic — so the
+ * request shape is verified against the live API while the row mapping is not.
+ * `isCurated==1`, which older docs require, is refused outright.
+ */
+export async function fetchPlaylists(apis, { startDate, endDate, maxResults = 50 }) {
+  const data = await queryTiered(
+    apis,
+    { startDate, endDate, dimensions: 'playlist', sort: '-views', maxResults },
+    ['views,estimatedMinutesWatched,playlistStarts,viewsPerPlaylistStart', 'views,estimatedMinutesWatched'],
+  );
+  return rowsFromAnalytics(data).map(r => ({
+    playlistId: r.playlist,
+    views: num(r.views),
+    estimatedMinutesWatched: num(r.estimatedMinutesWatched),
+    playlistStarts: num(r.playlistStarts),
+    viewsPerPlaylistStart: num(r.viewsPerPlaylistStart),
+  }));
+}
+
+/**
+ * Revenue, day by day.
+ *
+ * Every metric here was accepted by the API on 2026-07-31 — contradicting Google's
+ * channel_reports page, which claims revenue is unsupported for channel reports —
+ * but the probed channel is unmonetized and returned **zero rows**. The request is
+ * verified; the values are not. A caller seeing an empty result on a channel below
+ * the YouTube Partner Programme threshold is seeing the expected outcome, not a bug.
+ *
+ * Requires the `yt-analytics-monetary.readonly` scope, which is already in the
+ * default grant — do not remove it.
+ */
+export async function fetchRevenue(apis, { startDate, endDate }) {
+  const data = await queryTiered(
+    apis,
+    { startDate, endDate, dimensions: 'day', sort: 'day' },
+    [
+      'estimatedRevenue,estimatedAdRevenue,estimatedRedPartnerRevenue,grossRevenue,cpm,playbackBasedCpm,adImpressions,monetizedPlaybacks',
+      'estimatedRevenue,estimatedAdRevenue,grossRevenue,cpm,adImpressions,monetizedPlaybacks',
+      'estimatedRevenue',
+    ],
+  );
+  return rowsFromAnalytics(data).map(r => ({
+    date: r.day,
+    estimatedRevenue: num(r.estimatedRevenue),
+    estimatedAdRevenue: num(r.estimatedAdRevenue),
+    estimatedRedPartnerRevenue: num(r.estimatedRedPartnerRevenue),
+    grossRevenue: num(r.grossRevenue),
+    cpm: num(r.cpm),
+    playbackBasedCpm: num(r.playbackBasedCpm),
+    adImpressions: num(r.adImpressions),
+    monetizedPlaybacks: num(r.monetizedPlaybacks),
+  }));
 }
 
 const VIDEO_METRICS = 'estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained,subscribersLost';
@@ -379,6 +456,77 @@ export async function fetchGeography(apis, { startDate, endDate, maxResults = 50
     estimatedMinutesWatched: num(r.estimatedMinutesWatched),
     subscribersGained: num(r.subscribersGained),
     subscribersLost: num(r.subscribersLost),
+  }));
+}
+
+/**
+ * Sub-national geography. Three dimensions, one shape — the row's `region` is
+ * whatever granularity was asked for, so a consumer reads one field regardless.
+ *
+ * `province` is the odd one: it is refused outright without a country filter
+ * (verified 2026-07-31), because YouTube only breaks provinces out within a
+ * country. `city` and `dma` accept one but do not require it.
+ */
+const GEO_LEVELS = { city: 'city', province: 'province', dma: 'dma' };
+
+export async function fetchSubGeography(apis, { startDate, endDate, level = 'city', country, maxResults = 25, segment, onDegraded }) {
+  const dimension = GEO_LEVELS[level];
+  if (!dimension) throw new YtStatsError(`Unknown geography level: ${level}`, { code: ERROR_CODES.INVALID_INPUT });
+
+  const { dimensions, tiers } = withSegment({
+    dimensions: dimension,
+    tiers: ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    segment,
+    onDegraded,
+  });
+
+  const params = { startDate, endDate, dimensions, sort: '-views', maxResults };
+  if (country) params.filters = `country==${country}`;
+
+  const data = await queryTiered(apis, params, tiers, onDegraded);
+  return rowsFromAnalytics(data).map(r => ({
+    level,
+    region: r[dimension],
+    ...seg(r, segment),
+    views: num(r.views),
+    engagedViews: num(r.engagedViews),
+    estimatedMinutesWatched: num(r.estimatedMinutesWatched),
+  }));
+}
+
+export async function fetchOperatingSystems(apis, { startDate, endDate, segment, onDegraded }) {
+  const { dimensions, tiers } = withSegment({
+    dimensions: 'operatingSystem',
+    tiers: ['views,engagedViews,estimatedMinutesWatched', 'views,estimatedMinutesWatched'],
+    segment,
+    onDegraded,
+  });
+  const data = await queryTiered(apis, { startDate, endDate, dimensions, sort: '-views' }, tiers, onDegraded);
+  return rowsFromAnalytics(data).map(r => ({
+    operatingSystem: r.operatingSystem,
+    ...seg(r, segment),
+    views: num(r.views),
+    engagedViews: num(r.engagedViews),
+    estimatedMinutesWatched: num(r.estimatedMinutesWatched),
+  }));
+}
+
+/**
+ * Where viewers shared from. `shares` is the ONLY metric this dimension tolerates —
+ * adding `views` returns `The query is not supported.` (verified 2026-07-31), the
+ * same trap `insightTrafficSourceDetail` has. Do not widen the metric list.
+ */
+export async function fetchSharingServices(apis, { startDate, endDate }) {
+  const data = await query(apis, {
+    startDate,
+    endDate,
+    metrics: 'shares',
+    dimensions: 'sharingService',
+    sort: '-shares',
+  });
+  return rowsFromAnalytics(data).map(r => ({
+    sharingService: r.sharingService,
+    shares: num(r.shares),
   }));
 }
 

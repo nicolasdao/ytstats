@@ -603,7 +603,7 @@ export function buildProgram(deps = {}) {
    */
   const SEGMENTS = ['subscribedStatus', 'youtubeProduct'];
 
-  const simple = (name, description, fn, { segmentable = true } = {}) => {
+  const simple = (name, description, fn, { segmentable = true, check } = {}) => {
     const cmd = accountOption(program.command(name).description(description));
     // Declared even where it is refused, so `--segment` on those commands fails as
     // an invalid choice naming the flag rather than as an unknown option. Hidden
@@ -663,6 +663,8 @@ export function buildProgram(deps = {}) {
                 + 'second dimension is added. Run it unsegmented.',
             }));
           }
+          // Per-command preconditions the API only reports as an opaque refusal.
+          if (check) problems.push(...check(cmdOpts));
           return problems;
         },
       },
@@ -698,6 +700,49 @@ export function buildProgram(deps = {}) {
   simple('geography', 'viewer breakdown by country',
     (apis, range, opts) => analytics.fetchGeography(apis, { ...range, maxResults: Number(opts.limit) }))
     .option('-n, --limit <number>', 'maximum countries', '50');
+
+  // Sub-national geography. One command rather than three, because city/province/dma
+  // answer the same question at different granularity and every row has the same
+  // shape — `region` carries whichever level was asked for.
+  simple('regions', 'viewers by city, province or DMA (sub-national geography)',
+    (apis, range, opts) => analytics.fetchSubGeography(apis, {
+      ...range,
+      level: opts.level,
+      country: opts.country,
+      maxResults: Number(opts.limit),
+    }), {
+      // YouTube only breaks provinces out within a country and refuses the query
+      // otherwise — an error naming neither the flag nor the reason.
+      check: o => (o.level === 'province' && !o.country
+        ? [diagnose(DIAGNOSTICS.INPUT_MISSING_REQUIRED, {
+          flag: '--country',
+          expected: 'an ISO country code, e.g. --country US',
+          detail: '--level province breaks a country into its provinces, so YouTube '
+            + 'requires one to break down. Without it the query is refused outright.',
+        })]
+        : []),
+    })
+    .addOption(new Option('--level <level>', 'geographic granularity')
+      .choices(['city', 'province', 'dma']).default('city'))
+    .option('--country <code>', 'ISO country code to break down within (required by --level province)')
+    .option('-n, --limit <number>', 'maximum regions', '25');
+
+  simple('operating-systems', 'views by operating system',
+    (apis, range) => analytics.fetchOperatingSystems(apis, range));
+
+  simple('sharing-services', 'where viewers shared your videos (share counts only)',
+    (apis, range) => analytics.fetchSharingServices(apis, range), { segmentable: false });
+
+  simple('playlists', 'per-playlist views and playlist starts',
+    (apis, range, opts) => analytics.fetchPlaylists(apis, { ...range, maxResults: Number(opts.limit) }),
+    { segmentable: false })
+    .option('-n, --limit <number>', 'maximum playlists', '50');
+
+  simple('revenue', 'estimated revenue, CPM and monetized playbacks by day',
+    (apis, range) => analytics.fetchRevenue(apis, range), { segmentable: false });
+
+  simple('cards', 'card and end-screen impressions, clicks and click rates by day',
+    (apis, range) => analytics.fetchCardMetrics(apis, range), { segmentable: false });
 
   dateOptions(
     program

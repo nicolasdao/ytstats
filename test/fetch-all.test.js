@@ -20,6 +20,11 @@ function fetchers(overrides = {}) {
     fetchContentTypes: vi.fn(async () => [{ contentType: 'shorts', views: 8 }]),
     fetchSearchTerms: vi.fn(async () => [{ searchTerm: 'ai', views: 2 }]),
     fetchGeography: vi.fn(async () => [{ country: 'AU', views: 5 }]),
+    fetchSubGeography: vi.fn(async () => [{ level: 'city', region: 'Sydney', views: 3 }]),
+    fetchOperatingSystems: vi.fn(async () => [{ operatingSystem: 'ANDROID', views: 6 }]),
+    fetchSharingServices: vi.fn(async () => [{ sharingService: 'COPY_PASTE', shares: 2 }]),
+    fetchPlaylists: vi.fn(async () => [{ playlistId: 'PL1', views: 4 }]),
+    fetchRevenue: vi.fn(async () => [{ date: '2026-07-01', estimatedRevenue: 0 }]),
     fetchPlaybackLocations: vi.fn(async () => [{ locationType: 'SHORTS_FEED', views: 7 }]),
     fetchTrafficSourceDetails: vi.fn(async () => [{ sourceType: 'YT_SEARCH', detail: 'ai', views: 2 }]),
     fetchAudienceRetention: vi.fn(async () => [{ position: 0, ratio: 1.2 }]),
@@ -37,6 +42,7 @@ describe('fetchAll', () => {
       'channel', 'videos', 'daily', 'videoAnalytics', 'trafficSources', 'demographics',
       'deviceTypes', 'contentTypes', 'searchTerms', 'geography', 'playbackLocations',
       'trafficSourceDetails', 'audienceRetention',
+      'cities', 'operatingSystems', 'sharingServices', 'playlists', 'revenue',
     ]));
     expect(out.data.channel.id).toBe('UC1');
     expect(out.data.videos).toHaveLength(2);

@@ -19,6 +19,11 @@ function defaultFetchers() {
     fetchContentTypes: analytics.fetchContentTypes,
     fetchSearchTerms: analytics.fetchSearchTerms,
     fetchGeography: analytics.fetchGeography,
+    fetchSubGeography: analytics.fetchSubGeography,
+    fetchOperatingSystems: analytics.fetchOperatingSystems,
+    fetchSharingServices: analytics.fetchSharingServices,
+    fetchPlaylists: analytics.fetchPlaylists,
+    fetchRevenue: analytics.fetchRevenue,
     fetchPlaybackLocations: analytics.fetchPlaybackLocations,
     fetchTrafficSourceDetails: analytics.fetchTrafficSourceDetails,
     fetchAudienceRetention: analytics.fetchAudienceRetention,
@@ -112,6 +117,7 @@ export async function fetchAll(apis, {
   const [
     videoAnalytics, trafficSources, demographics, deviceTypes,
     contentTypes, searchTerms, geography, playbackLocations,
+    cities, operatingSystems, sharingServices, playlists, revenue,
   ] = await Promise.all([
     step('videoAnalytics', () => f.fetchVideoAnalytics(apis, opts('videoAnalytics')), []),
     step('trafficSources', () => f.fetchTrafficSources(apis, opts('trafficSources')), []),
@@ -121,6 +127,13 @@ export async function fetchAll(apis, {
     step('searchTerms', () => f.fetchSearchTerms(apis, period), []),
     step('geography', () => f.fetchGeography(apis, opts('geography')), []),
     step('playbackLocations', () => f.fetchPlaybackLocations(apis, opts('playbackLocations')), []),
+    // City is the only sub-national level that needs no country filter, so it is
+    // the one that can run unattended here. province/dma stay on `ytstats regions`.
+    step('cities', () => f.fetchSubGeography(apis, { ...period, level: 'city' }), []),
+    step('operatingSystems', () => f.fetchOperatingSystems(apis, opts('operatingSystems')), []),
+    step('sharingServices', () => f.fetchSharingServices(apis, period), []),
+    step('playlists', () => f.fetchPlaylists(apis, period), []),
+    step('revenue', () => f.fetchRevenue(apis, period), []),
   ]);
 
   // Only drill into traffic source types the channel actually has.
@@ -168,6 +181,11 @@ export async function fetchAll(apis, {
     contentTypes,
     searchTerms,
     geography,
+    cities,
+    operatingSystems,
+    sharingServices,
+    playlists,
+    revenue,
     playbackLocations,
     audienceRetention,
   };

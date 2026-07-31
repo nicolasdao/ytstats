@@ -12,6 +12,12 @@ import {
   fetchPlaybackLocations,
   fetchTrafficSourceDetails,
   fetchAudienceRetention,
+  fetchSubGeography,
+  fetchOperatingSystems,
+  fetchSharingServices,
+  fetchPlaylists,
+  fetchRevenue,
+  fetchCardMetrics,
   runCustomReport,
 } from '../../src/api/analytics.js';
 import {
@@ -432,6 +438,133 @@ describe('Analytics API — metric degradation', () => {
 
     expect(calls[0].metrics).toBe('views');
     expect(calls[1].metrics).toBe('views');
+  });
+});
+
+describe('Analytics API — sub-national geography, platform and revenue', () => {
+  // CAPTURED VERBATIM from the live API on 2026-07-31.
+  const REAL = {
+    city: { cols: ['city', 'views', 'engagedViews', 'estimatedMinutesWatched'],
+      rows: [['Bengaluru', 58, 41, 25], ['Singapore', 44, 32, 12], ['Sydney', 35, 20, 4]] },
+    province: { cols: ['province', 'views', 'engagedViews', 'estimatedMinutesWatched'],
+      rows: [['US-CA', 417, 203, 83], ['US-TX', 82, 36, 16]] },
+    dma: { cols: ['dma', 'views', 'engagedViews', 'estimatedMinutesWatched'],
+      rows: [['819', 27, 10, 3], ['803', 23, 10, 4]] },
+    os: { cols: ['operatingSystem', 'views', 'engagedViews', 'estimatedMinutesWatched'],
+      rows: [['ANDROID', 14243, 5498, 2995], ['IOS', 7855, 3223, 1858]] },
+    sharing: { cols: ['sharingService', 'shares'],
+      rows: [['COPY_PASTE', 17], ['OTHER', 10], ['WHATS_APP', 6]] },
+  };
+  const capture = k => resp(REAL[k].cols, REAL[k].rows);
+
+  it.each([
+    ['city', 'city', 'Bengaluru'],
+    ['province', 'province', 'US-CA'],
+    ['dma', 'dma', '819'],
+  ])('%s uses the %s dimension and reports the level on every row', async (level, dimension, firstRegion) => {
+    const { analytics, calls } = analyticsApi(() => capture(level));
+    const rows = await fetchSubGeography(
+      { analytics },
+      { startDate: 'a', endDate: 'b', level, country: level === 'province' ? 'US' : undefined },
+    );
+
+    expect(calls[0].dimensions).toBe(dimension);
+    expect(calls[0].maxResults).toBe(25);
+    // A value, not a shape — the three levels share one row shape, so `region`
+    // reading undefined would still produce correctly-keyed rows.
+    expect(rows[0]).toMatchObject({ level, region: firstRegion });
+    expect(rows[0].views).toBeGreaterThan(0);
+  });
+
+  it('filters by country only when one is given', async () => {
+    // province is refused outright without it; city and dma must not carry an
+    // unrequested filter that would silently narrow the result.
+    const { analytics, calls } = analyticsApi(() => capture('province'));
+    await fetchSubGeography({ analytics }, { startDate: 'a', endDate: 'b', level: 'province', country: 'US' });
+    expect(calls[0].filters).toBe('country==US');
+
+    const plain = analyticsApi(() => capture('city'));
+    await fetchSubGeography({ analytics: plain.analytics }, { startDate: 'a', endDate: 'b', level: 'city' });
+    expect(plain.calls[0].filters).toBeUndefined();
+  });
+
+  it('rejects an unknown geography level before calling the API', async () => {
+    const { analytics, calls } = analyticsApi(() => capture('city'));
+    await expect(
+      fetchSubGeography({ analytics }, { startDate: 'a', endDate: 'b', level: 'galaxy' }),
+    ).rejects.toThrow(/galaxy/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('operating systems come back sorted by views with real values', async () => {
+    const { analytics, calls } = analyticsApi(() => capture('os'));
+    const rows = await fetchOperatingSystems({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].dimensions).toBe('operatingSystem');
+    expect(calls[0].sort).toBe('-views');
+    expect(rows[0]).toEqual({
+      operatingSystem: 'ANDROID', views: 14243, engagedViews: 5498, estimatedMinutesWatched: 2995,
+    });
+  });
+
+  it('sharing services request shares and nothing else', async () => {
+    // Adding `views` to this dimension returns "The query is not supported." —
+    // the same views-only trap insightTrafficSourceDetail has.
+    const { analytics, calls } = analyticsApi(() => capture('sharing'));
+    const rows = await fetchSharingServices({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].metrics).toBe('shares');
+    expect(calls[0].dimensions).toBe('sharingService');
+    expect(rows[0]).toEqual({ sharingService: 'COPY_PASTE', shares: 17 });
+  });
+
+  it('revenue always sorts by day, because an unsorted query returns zero rows', async () => {
+    // Verified live: identical revenue metrics with dimensions=day return 363 rows
+    // with sort and 0 rows without it — no error either way.
+    const { analytics, calls } = analyticsApi(() =>
+      resp(['day', 'estimatedRevenue', 'estimatedAdRevenue'], [['2026-07-01', 0, 0]]));
+    await fetchRevenue({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].sort).toBe('day');
+    expect(calls[0].dimensions).toBe('day');
+    expect(calls[0].metrics).toContain('estimatedRevenue');
+    expect(calls[0].metrics).toContain('monetizedPlaybacks');
+  });
+
+  it('a zero revenue day is reported as zero, not dropped', async () => {
+    // An unmonetized channel legitimately returns rows of zeros. Treating them as
+    // "no data" would be indistinguishable from a broken query.
+    const { analytics } = analyticsApi(() =>
+      resp(['day', 'estimatedRevenue', 'cpm'], [['2026-07-01', 0, 0]]));
+    const rows = await fetchRevenue({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].estimatedRevenue).toBe(0);
+    expect(rows[0].monetizedPlaybacks).toBeNull();
+  });
+
+  it('card metrics still degrade to [] rather than failing the caller', async () => {
+    const { analytics } = analyticsApi(() => { throw new Error('boom'); });
+    expect(await fetchCardMetrics({ analytics }, { startDate: 'a', endDate: 'b' })).toEqual([]);
+  });
+
+  it('card metrics request the full counter set first', async () => {
+    const { analytics, calls } = analyticsApi(() =>
+      resp(['day', 'cardImpressions', 'cardTeaserClicks'], [['2026-07-01', 0, 0]]));
+    await fetchCardMetrics({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].metrics).toContain('cardTeaserImpressions');
+    expect(calls[0].metrics).toContain('annotationClickableImpressions');
+  });
+
+  it('playlists never request the isCurated filter, which the API refuses', async () => {
+    const { analytics, calls } = analyticsApi(() =>
+      resp(['playlist', 'views', 'estimatedMinutesWatched'], [['PL123', 10, 4]]));
+    const rows = await fetchPlaylists({ analytics }, { startDate: 'a', endDate: 'b' });
+
+    expect(calls[0].filters).toBeUndefined();
+    expect(calls[0].dimensions).toBe('playlist');
+    expect(rows[0]).toMatchObject({ playlistId: 'PL123', views: 10 });
   });
 });
 
