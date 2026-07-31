@@ -8,7 +8,7 @@ source:
 
 # Testing
 
-486 tests across 17 files. **None of them requires network access**, and none opens a browser.
+510 tests across 18 files. **None of them requires network access**, and none opens a browser.
 
 ## Running
 
@@ -35,7 +35,7 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 | File | Tests | Covers |
 |---|---|---|
 | `test/envelope.test.js` | 106 | Envelope shape, the diagnostic catalog, severity routing, `nextSteps`, redaction |
-| `test/api/fetchers.test.js` | 49 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher; metric tiers; job coverage |
+| `test/api/fetchers.test.js` | 63 | Exact query parameters sent by every Data, Analytics, and Reporting fetcher; metric tiers; segment narrowing; job coverage |
 | `test/api/captions.test.js` | 30 | Exact caption query parameters, track selection, and the cue parser — pinned to a verbatim capture of live YouTube output |
 | `test/cli.e2e.test.js` | 43 | The real binary, spawned as a subprocess |
 | `test/api/transforms.test.js` | 33 | Duration parsing, content classification, CSV, date normalization, row zipping |
@@ -49,6 +49,7 @@ Nothing is mocked at the module level. Tests hand in plain objects, which means 
 | `test/cli-degradation.test.js` | 12 | Authenticated commands in-process: which warnings a dropped metric produces |
 | `test/transcript.test.js` | 15 | The `transcript` command in-process: cue shape, cache hit and invalidation, the hyphenated video id, and the scope-missing failure |
 | `test/dates.test.js` | 11 | Window resolution, calendar validation, bounds |
+| `test/cli-segment.test.js` | 10 | `--segment` in-process: the segment column, the partition arithmetic, the metric-narrowing warning, and the `search-terms` rejection |
 | `test/client-id.test.js` | 10 | Client ID pre-flight validation, both tiers |
 | `test/config/paths.test.js` | 8 | Per-OS directory resolution, including Windows and Linux from any host |
 

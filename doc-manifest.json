@@ -285,11 +285,12 @@
         "Shipping to production",
         "Documentation"
       ],
-      "line_count": 184,
+      "line_count": 185,
       "links_to": [
         "README.md",
         "docs/architecture.md",
         "docs/cli.md",
+        "docs/gotchas/cli-output.md",
         "docs/gotchas/youtube-api.md",
         "docs/output-contract.md",
         "docs/testing.md",
@@ -415,12 +416,13 @@
         "Redaction runs on the serialized JSON, not the object",
         "Google error classification is order-dependent",
         "An empty result set is reported explicitly",
+        "A flag a command always refuses must still be declared on it",
         "--no-retention is Commander's negation, so the option reads as `retention`",
         "Exit codes are also in the envelope",
         "The bin shim is the last line of defence",
         "Diagnostic detail is folded from context, so callers need not format it"
       ],
-      "line_count": 157,
+      "line_count": 167,
       "links_to": [
         "docs/cli.md",
         "docs/output-contract.md"
@@ -619,7 +621,7 @@
         "What is not covered",
         "Adding tests"
       ],
-      "line_count": 105,
+      "line_count": 106,
       "links_to": [
         "docs/contributing.md"
       ],

@@ -17,7 +17,8 @@ How to change `ytstats` without breaking the contracts it makes. Read [architect
 2. **Add a test asserting the exact query parameters**, not just the return shape. That is what protects the undocumented API limits — a test that only checks returned rows lets someone raise `maxResults` and reintroduce an opaque failure.
    **Build the response fixture from a captured payload, not from memory.** Asserting the request precisely while inventing the response verifies only that the code matches your assumptions about the API. That is how `transcript` shipped broken in 0.7.0 — the request parameters were right, the fabricated response was a string, and the real one is a Blob. See [testing.md](testing.md#adding-tests).
 3. **Wire it into `fetch-all.js` behind `step()`** so a failure degrades to a warning rather than aborting the whole run.
-4. **Add a dedicated command in `cli.js`** if it is independently useful. Most analytics datasets can use the `simple()` helper, which supplies the date flags, the range validation, and the `DATA_EMPTY` warning.
+4. **Add a dedicated command in `cli.js`** if it is independently useful. Most analytics datasets can use the `simple()` helper, which supplies the date flags, the range validation, `--segment`, and the `DATA_EMPTY` warning.
+   **Decide whether the dataset can be segmented, and prove it.** `simple()` offers `--segment` by default, so a new command accepts it whether or not the API does. Run the dimension against `subscribedStatus` and `youtubeProduct` before shipping: if the pairing is refused, that is fine and surfaces as `API_QUERY_NOT_SUPPORTED`, but if the metric list needs narrowing, add the fetcher's metrics to `SEGMENT_METRICS` — see [the gotcha](gotchas/youtube-api.md#a-segment-dimension-silently-restricts-which-metrics-a-report-may-request). Pass `segmentable: false` only when the dimension itself is too fragile to carry one.
 5. **Add a diagnostic to `diagnostics.js`** if it introduces a new failure mode. The catalog test fails unless the entry has a title, detail, cause, and at least one remediation step.
 6. **Update [cli.md](cli.md), [youtube-apis.md](youtube-apis.md), and `CHANGELOG.md`.**
 
@@ -28,7 +29,7 @@ If YouTube rejects a metric or dimension combination in a way that is not obviou
 Commands live in `src/cli.js`, grouped by section. Three helpers exist:
 
 - **`run(name, body, { validate })`** wraps a command body: diagnostics in, one envelope plus exit code out. The `validate` callback runs **before** authentication and returns an array of diagnostics rather than throwing, so every input problem is reported at once.
-- **`simple(name, description, fn)`** defines a date-windowed analytics command with the standard flags, range validation, and empty-result warning. Returns the command so extra options can be chained.
+- **`simple(name, description, fn, { segmentable })`** defines a date-windowed analytics command with the standard flags, range validation, `--segment`, and the empty-result warning. Returns the command so extra options can be chained. Pass `segmentable: false` for a dataset that cannot take a second dimension — the flag stays declared but hidden and is refused with `INPUT_INVALID_CHOICE`, for the reason in [gotchas/cli-output.md](gotchas/cli-output.md#a-flag-a-command-always-refuses-must-still-be-declared-on-it).
 - **`dateOptions(cmd)`** adds `--days`, `--start`, and `--end` to a command built by hand.
 
 Use `withApis(globalOpts)` to authenticate and get the API bundle. Never write to stdout directly — go through `reporter.succeed()` or `reporter.fail()`, or you break the one-JSON-document guarantee.

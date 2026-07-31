@@ -219,7 +219,7 @@ Library callers get no envelope: `fetchAll` returns its result object directly a
 There is a published agent skill that operates **the entire CLI** — all 27 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
 
 ```
-nicolasdao/ytstats@0.1.0        install with HappySkills
+nicolasdao/ytstats@0.9.0        install with HappySkills
 ```
 
 Ask for what you want and it picks the command, runs it, and answers the question:
@@ -236,7 +236,7 @@ It auto-invokes, so there is no slash command to remember. It also carries the p
 
 Two behaviours are deliberate: it confirms before `logout`, because that revokes the refresh token with Google, and it redirects a large `fetch` to a file rather than printing megabytes of JSON.
 
-Requires `ytstats` **0.2.0 or newer** — it reads the `clientId` field on `status` and the `AUTH_CLIENT_MISMATCH` diagnostic, both added in 0.2.0.
+Requires `ytstats` **0.8.0 or newer** — it routes to `--segment`, which earlier versions reject as an unknown option, and it reads the metric-narrowing warning that comes with it. The skill versions and publishes separately from the CLI, and its floor moves whenever a release changes behaviour its guidance depends on.
 
 The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own `SKILL.md` and `references/` are its full documentation.
 
@@ -289,7 +289,7 @@ src/
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                486 tests, none requiring network access
+test/                510 tests, none requiring network access
 docs/                topic documentation, indexed below
 .agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```

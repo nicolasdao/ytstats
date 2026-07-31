@@ -35,7 +35,7 @@ bin/ytstats.js          thin shim; last-resort guard against stdout pollution
 
 ## Design principles
 
-**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 486 tests run without a network connection and without opening a browser.
+**Everything I/O is injected.** API clients, the OAuth2 constructor, the loopback server, the browser opener, the identity lookup, the output sinks, and even `now()` are parameters with real defaults. This is why 510 tests run without a network connection and without opening a browser.
 
 `buildProgram({ makeApis })` is part of that seam: it defaults to `createApis` and exists so a test can drive an **authenticated** command with a fake API bundle. Before it, `createApis` was called directly inside `withApis`, which made every post-auth code path — including which warnings a command emits — unreachable from the suite.
 

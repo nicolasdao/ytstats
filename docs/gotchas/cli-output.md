@@ -128,6 +128,16 @@ Commands built by hand follow the same convention rather than inventing their ow
 
 **Where handled:** the `rows.length === 0` branch in `simple()`, and the no-track branch of the `transcript` action, `src/cli.js`.
 
+## A flag a command always refuses must still be declared on it
+
+`search-terms` cannot be segmented, so the obvious implementation is to leave `--segment` off that command. Commander then answers `search-terms --segment subscribedStatus` with `commander.unknownOption`, which maps to `INPUT_UNKNOWN_OPTION` — a diagnostic saying the flag does not exist, when it exists everywhere else and is refused here for a specific reason.
+
+Declaring the option and rejecting it in the `validate` callback gives `INPUT_INVALID_CHOICE` instead, whose `detail` names the flag and explains that `insightTrafficSourceDetail` tolerates only the `views` metric. The caller learns which of the two situations they are in; `INPUT_UNKNOWN_OPTION` conflates them.
+
+The cost is that `--help` would advertise a flag that always fails, so the Option is `hideHelp()`-ed on those commands. Declared, parseable, refused with a reason, and not advertised — all four are needed, and dropping any one of them degrades the failure.
+
+**Where handled:** the `segmentable` parameter of `simple()` in `src/cli.js`, and the `--segment` branch of its `validate` callback.
+
 ## --no-retention is Commander's negation, so the option reads as `retention`
 
 `.option('--no-retention', …)` makes Commander expose `cmdOpts.retention`, defaulting to `true` and becoming `false` when the flag is passed. There is no `cmdOpts.noRetention`. The same applies to `--no-browser`, read as `!cmdOpts.browser` in the `login` action.
