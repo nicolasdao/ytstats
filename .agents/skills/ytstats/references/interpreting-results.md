@@ -90,6 +90,24 @@ The CLI prefers an author-written track and falls back to ASR, but it always rep
 
 This matters most in exactly the case the feature is for: explaining a retention drop-off. Recommending someone cut a line that they never actually said is worse than saying nothing.
 
+## Zero revenue is an answer, not a failure
+
+`revenue` returns a row per day with `estimatedRevenue`, `cpm`, `adImpressions` and `monetizedPlaybacks`. On a channel that is **not in the YouTube Partner Programme** — under 1,000 subscribers, or not yet accepted — every one of those is `0`. That is the correct answer, not a broken query.
+
+Say "this channel is not monetized, so there is no revenue to report" rather than "revenue data is unavailable" — the second implies a fix exists. Check `channel` for the subscriber count before speculating.
+
+A genuinely broken revenue query fails loudly with `API_QUERY_NOT_SUPPORTED` or an auth error. Zeros with `ok: true` mean the query worked.
+
+## Zeros from `cards` mean no cards, and the command cannot tell you if it failed
+
+`cards` is the one dataset whose fetcher swallows its own errors and returns an empty list, so a failure produces **no warning anywhere in the envelope**. Empty or all-zero card metrics therefore mean either "this channel uses no cards" or "the query failed" — and you cannot distinguish them from the output.
+
+Treat card figures as **unknown** rather than zero unless the user has told you they use cards. Do not report "your cards get no clicks" from an all-zero result.
+
+## `regions --level province` needs a country, and says so before calling YouTube
+
+`province` breaks a country into its provinces, so YouTube refuses it without one. The CLI catches this first and fails with `INPUT_MISSING_REQUIRED` (exit 3) naming `--country`. Re-run as `regions --level province --country US`. Values come back as ISO 3166-2 (`US-CA`), and `dma` values are Nielsen market **numbers** (`819`), not names — do not present a DMA code as if it were a city.
+
 ## An empty retention curve before ytstats 0.8.1 is a bug, not a video without data
 
 If `retention` returns `curve: []`, check `meta.version` before saying anything. On **0.8.0 and earlier** the command returned an empty curve — `ok: true`, no warning — for every video on a channel whose drop-off metrics YouTube refuses, because the refusal arrives as HTTP 200 with zero rows and the metric fallback only recognised explicit errors. A channel with years of retention data looked like one with none.

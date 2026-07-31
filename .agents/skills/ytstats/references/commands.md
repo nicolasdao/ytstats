@@ -97,7 +97,7 @@ ytstats fetch [--days 90] [--start <date>] [--end <date>]
 | `--retention-limit <n>` | `50` | How many recent videos to pull retention for |
 | `--reach` | off | Also fetch thumbnail impressions and CTR |
 
-The envelope's `.data` is `{period, warnings, notes, data}` — the datasets sit one level deeper, at `.data.data`, and each is a **bare array** with no `.rows` wrapper. `.data.data` carries `channel`, `videos`, `daily`, `videoAnalytics`, `trafficSources`, `trafficSourceDetails`, `demographics`, `deviceTypes`, `contentTypes`, `searchTerms`, `geography`, `playbackLocations`, `audienceRetention`, and `reach` when requested.
+The envelope's `.data` is `{period, warnings, notes, data}` — the datasets sit one level deeper, at `.data.data`, and each is a **bare array** with no `.rows` wrapper. `.data.data` carries `channel`, `videos`, `daily`, `videoAnalytics`, `trafficSources`, `trafficSourceDetails`, `demographics`, `deviceTypes`, `contentTypes`, `searchTerms`, `geography`, `cities`, `operatingSystems`, `sharingServices`, `playlists`, `revenue`, `playbackLocations`, `audienceRetention`, and `reach` when requested. Sub-national geography appears as `cities` only — `province` and `dma` need a country filter `fetch` cannot guess, so use `regions` for those.
 
 `.data.warnings` holds per-step failures as `{step, code, message}`, `.data.notes` holds informational messages, `.data.period` the resolved window. Warnings are also copied to the envelope's top-level `.warnings`.
 
@@ -122,6 +122,12 @@ The date-windowed ones return `{ period, rows }` at `.data`. Two are exceptions:
 | `geography` | Viewers by country | `-n, --limit` (default 50), `--segment` |
 | `playback-locations` | Shorts feed, watch page, embedded | `--segment` |
 | `video-analytics` | Per-video metrics, top 200 by views | `--segment` |
+| `regions` | Sub-national geography — city, province or DMA | `--level`, `--country`, `-n, --limit` (default 25), `--segment` |
+| `operating-systems` | Views by operating system | `--segment` |
+| `sharing-services` | Where viewers shared from — **share counts only** | — |
+| `playlists` | Per-playlist views and playlist starts | `-n, --limit` (default 50) |
+| `revenue` | Estimated revenue, CPM, ad impressions, monetized playbacks by day | — |
+| `cards` | Card and end-screen impressions, clicks and click rates by day | — |
 
 `channel` returns the channel resource directly, not `{period, rows}`: `id`, `title`, `description`, `customUrl`, `publishedAt`, `country`, `subscriberCount`, `viewCount`, `videoCount`, `uploadsPlaylistId`, `thumbnailUrl`.
 
@@ -294,3 +300,31 @@ Also at `meta.exitCode`, so a consumer reading only stdout still knows.
 ## Quota
 
 The Data API allows 10,000 units/day per Google Cloud project. A full `fetch` for a 100-video channel costs roughly 5 units, because the uploads playlist (1 unit per 50 videos) is used instead of `search.list` (100 units per call). Retention costs one call per video. `transcript` is the expensive one: `captions.download` is **200 units** and `captions.list` is 50, so an uncached transcript costs 250 — roughly 40 a day. The Analytics and Reporting APIs have separate quotas.
+
+### regions
+
+```bash
+ytstats regions [--level city|province|dma] [--country <code>] [-n <limit>]
+```
+
+Rows are `{ level, region, views, engagedViews, estimatedMinutesWatched }` — `region` carries whichever level was requested, so all three levels share one shape.
+
+`--level province` **requires `--country`** and fails with `INPUT_MISSING_REQUIRED` (exit 3) before any network call without it. Values: `city` gives names (`Bengaluru`), `province` gives ISO 3166-2 (`US-CA`), `dma` gives Nielsen market **numbers** (`819`) — not names.
+
+### sharing-services
+
+Rows are `{ sharingService, shares }`. `shares` is the only metric this dimension tolerates, so there are no view counts here and `--segment` is refused.
+
+### playlists
+
+Rows are `{ playlistId, views, estimatedMinutesWatched, playlistStarts, viewsPerPlaylistStart }`. Empty means no playlist traffic, which is common.
+
+### revenue
+
+Rows are `{ date, estimatedRevenue, estimatedAdRevenue, estimatedRedPartnerRevenue, grossRevenue, cpm, playbackBasedCpm, adImpressions, monetizedPlaybacks }`.
+
+**All zeros is the expected result on a channel that is not monetized** — see [interpreting-results.md](interpreting-results.md). Uses the monetary scope already in the default grant, so nothing extra to authorize.
+
+### cards
+
+Rows carry card and teaser impressions, clicks and click rates plus the legacy annotation counters, by day. This fetcher swallows its own failures, so an empty result carries **no warning** — treat empty as unknown, not zero.

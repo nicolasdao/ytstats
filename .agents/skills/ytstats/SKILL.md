@@ -39,7 +39,7 @@ Never parse the prose. `code` is the public contract; the wording is not.
 
 | Command | `.data` is | Get rows with |
 |---|---|---|
-| `daily`, `traffic`, `demographics`, `devices`, `content-types`, `search-terms`, `geography`, `playback-locations`, `video-analytics` | `{period, rows}` | `.data.rows` |
+| `daily`, `traffic`, `demographics`, `devices`, `content-types`, `search-terms`, `geography`, `playback-locations`, `video-analytics`, `regions`, `operating-systems`, `sharing-services`, `playlists`, `revenue`, `cards` | `{period, rows}` | `.data.rows` |
 | the same, run with `--segment <dim>` | `{period, rows}`, each row **plus a column named after the segment** | `.data.rows[].subscribedStatus` |
 | `videos` | a bare array | `.data` |
 | `channel` | the channel object | `.data.subscriberCount` |
@@ -84,6 +84,12 @@ The config directory is handled by the CLI itself — `%APPDATA%\ytstats\` on Wi
 | "Shorts vs long-form" | `content-types` |
 | "what do people search to find me" | `search-terms` |
 | "which countries" | `geography` |
+| "which cities", "which states", "which US markets" | `regions --level city\|province\|dma` — province needs `--country` |
+| "Android or iPhone", "what OS" | `operating-systems` |
+| "where do people share my videos" | `sharing-services` |
+| "how are my playlists doing" | `playlists` |
+| "how much am I earning", "revenue", "RPM", "CPM" | `revenue` — read the monetization caveat below |
+| "are my cards working", "end screen clicks" | `cards` |
 | "where do people watch" | `playback-locations` |
 | "best performing videos this period" | `video-analytics` |
 | "subscribers vs non-subscribers", "how do my subscribers behave differently" | any dataset command `--segment subscribedStatus` — read the caveats below |

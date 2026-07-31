@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0] - 2026-07-31
+
+### Added
+- Route the six new dataset commands: `regions` (city/province/dma), `operating-systems`, `sharing-services`, `playlists`, `revenue` and `cards`. Added to the routing table, the `.data` shapes table, `references/commands.md`, and the `fetch` dataset list.
+- Three interpretation rules, each covering a way to report a confidently wrong answer:
+  - **Zero revenue is an answer, not a failure.** An unmonetized channel returns rows of zeros, and "revenue data is unavailable" wrongly implies a fix exists. Check the subscriber count against the 1,000-sub Partner Programme threshold before speculating.
+  - **Zeros from `cards` mean no cards, or a swallowed failure — and the output cannot tell you which.** That fetcher catches its own errors and returns empty with no warning anywhere in the envelope, so card figures are unknown rather than zero.
+  - **`regions --level province` needs `--country`**, fails locally with `INPUT_MISSING_REQUIRED`, and returns ISO 3166-2 codes; `dma` returns Nielsen market numbers, which must not be presented as city names.
+
+### Changed
+- Require `ytstats` 0.9.0 or newer, up from 0.8.1 — the six commands do not exist before it.
+- Description now says 33 commands, not 27.
+
 ## [0.9.1] - 2026-07-31
 
 ### Changed

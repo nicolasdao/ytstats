@@ -1,7 +1,7 @@
 {
 	"name": "ytstats",
-	"version": "0.9.1",
-	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, transcripts, manage sign-in, switch channels, diagnose failures. Covers 27 commands, the JSON envelope, and interpretation traps.",
+	"version": "0.10.0",
+	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, transcripts, manage sign-in, switch channels, diagnose failures. Covers 33 commands, the JSON envelope, and interpretation traps.",
 	"type": "skill",
 	"authors": [
 		"Nicolas Dao <nicolas.dao@gmail.com>"
@@ -11,8 +11,8 @@
 	"dependencies": {},
 	"systemDependencies": {
 		"ytstats": {
-			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.8.1 or newer is required. 0.8.0 added the --segment flag this skill routes to, but on 0.8.0 and earlier `retention` returned an EMPTY curve with ok: true and no warning for every video on a channel whose drop-off metrics YouTube refuses -- the refusal arrives as HTTP 200 with zero rows and the metric fallback only recognised explicit errors. An agent on 0.8.0 would tell a user their videos have no retention data when they have years of it, which also silently breaks the transcript-vs-retention analysis this skill exists to support. The 0.7.1 floor before it existed because 0.7.0's `transcript` returned ZERO cues for every video — captions.download hands back a Blob and the body was read as a string, so a working transcript was indistinguishable from a video with no captions (ok: true plus a DATA_EMPTY warning), and 0.7.1 also normalizes trackKind to upper case, which this skill's ASR guidance branches on.",
-			"version": ">=0.8.1",
+			"description": "The CLI this skill drives. Run via npx without installing, or installed globally for faster startup. 0.9.0 or newer is required: it adds the regions, operating-systems, sharing-services, playlists, revenue and cards commands this skill routes to, which earlier versions reject as unknown commands. 0.8.0 added the --segment flag this skill routes to, but on 0.8.0 and earlier `retention` returned an EMPTY curve with ok: true and no warning for every video on a channel whose drop-off metrics YouTube refuses -- the refusal arrives as HTTP 200 with zero rows and the metric fallback only recognised explicit errors. An agent on 0.8.0 would tell a user their videos have no retention data when they have years of it, which also silently breaks the transcript-vs-retention analysis this skill exists to support. The 0.7.1 floor before it existed because 0.7.0's `transcript` returned ZERO cues for every video — captions.download hands back a Blob and the body was read as a string, so a working transcript was indistinguishable from a video with no captions (ok: true plus a DATA_EMPTY warning), and 0.7.1 also normalizes trackKind to upper case, which this skill's ASR guidance branches on.",
+			"version": ">=0.9.0",
 			"check": "npx --yes ytstats --version",
 			"install": {
 				"darwin": "npm install -g ytstats",
