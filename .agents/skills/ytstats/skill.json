@@ -1,7 +1,7 @@
 {
 	"name": "ytstats",
 	"version": "0.10.1",
-	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, transcripts, manage sign-in, switch channels, diagnose failures. Covers 33 commands, the JSON envelope, and interpretation traps.",
+	"description": "Pilot the ytstats CLI from plain English — pull YouTube channel analytics, transcripts, manage sign-in, switch channels, diagnose failures. Covers 33 commands, JSON envelope, interpretation traps.",
 	"type": "skill",
 	"authors": [
 		"Nicolas Dao <nicolas.dao@gmail.com>"

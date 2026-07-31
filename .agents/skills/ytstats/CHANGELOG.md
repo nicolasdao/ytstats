@@ -5,6 +5,7 @@
 ### Fixed
 - The segment support matrix omitted every command added in ytstats 0.9.0, and both it and the rejection rule still named `search-terms` as the only command that refuses `--segment`. **Five** do — `search-terms`, `sharing-services`, `playlists`, `revenue` and `cards` — so an agent would have read an `INPUT_INVALID_CHOICE` on four of them as an unexpected failure rather than a flag that does not apply.
 - `regions` is the only command whose segment support depends on `--level`, and the matrix now says so: `province` serves both segments, `city` and `dma` serve only `subscribedStatus`. Verified command by command against a live channel, not inferred from the flag list.
+- Description trimmed to 196 chars, under the 200 recommended, by dropping two articles from the descriptive tail. Every routing trigger phrase is retained.
 - `cards` now carries its explicit field list, and both it and the docs state that those eleven counters are **merged into `fetch`'s daily rows but absent from the standalone `daily` command** — an asymmetry that grew when the card set went from four counters to eleven, and which would read as a field having disappeared when comparing the two outputs.
 
 ## [0.10.0] - 2026-07-31
