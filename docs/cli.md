@@ -18,7 +18,7 @@ ytstats [global flags] <command> [command flags]
 
 Installed globally, or run without installing via `npx ytstats <command>`.
 
-Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 27 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
+Everything below can also be driven in plain English by the `nicolasdao/ytstats` agent skill, which covers all 33 commands and auto-invokes — see [Drive it from an AI agent](../README.md#drive-it-from-an-ai-agent).
 
 ## Global flags
 
@@ -227,6 +227,73 @@ They also raise `ANALYTICS_METRICS_UNSUPPORTED` when a metric this channel canno
 | `geography` | Viewer breakdown by country | `-n, --limit` (default `50`), `--segment` |
 | `playback-locations` | Where viewers watch — Shorts feed, watch page, embedded | `--segment` |
 | `video-analytics` | Per-video metrics, top 200 by views | `--segment` |
+| `regions` | Sub-national geography — city, province or DMA | `--level`, `--country`, `-n, --limit` (default `25`), `--segment` |
+| `operating-systems` | Views by operating system | `--segment` |
+| `sharing-services` | Where viewers shared from — **share counts only** | — |
+| `playlists` | Per-playlist views and playlist starts | `-n, --limit` (default `50`) |
+| `revenue` | Estimated revenue, CPM and monetized playbacks by day | — |
+| `cards` | Card and end-screen impressions, clicks and click rates by day | — |
+
+### regions
+
+```bash
+ytstats regions [--level city|province|dma] [--country <code>] [-n <limit>]
+```
+
+Sub-national geography. One command rather than three, because the levels answer the same question at different granularity and share one row shape — `region` carries whichever level was requested, and `level` echoes it back:
+
+```jsonc
+{ "level": "province", "region": "US-CA", "views": 417, "engagedViews": 203, "estimatedMinutesWatched": 83 }
+```
+
+| Level | Values look like | `--country` |
+|---|---|---|
+| `city` (default) | `Bengaluru`, `Singapore` | optional |
+| `province` | `US-CA`, `US-TX` (ISO 3166-2) | **required** |
+| `dma` | `819`, `803` (Nielsen US market codes) | optional |
+
+`--level province` **requires `--country`** and is rejected with `INPUT_MISSING_REQUIRED` (exit 3) before any network call if it is missing. YouTube only breaks provinces out within a country and otherwise refuses the query with an error naming neither the flag nor the reason.
+
+### sharing-services
+
+```bash
+ytstats sharing-services
+```
+
+Rows are `{ sharingService, shares }` — `COPY_PASTE`, `WHATS_APP`, `FACEBOOK` and so on. **`shares` is the only metric this dimension tolerates**; adding `views` makes YouTube reject the whole query, so the flag set is deliberately bare and `--segment` is refused. Same family as the `insightTrafficSourceDetail` restriction.
+
+### playlists
+
+```bash
+ytstats playlists [-n <limit>]
+```
+
+Rows are `{ playlistId, views, estimatedMinutesWatched, playlistStarts, viewsPerPlaylistStart }`. The `isCurated==1` filter that older Google docs describe is **refused** by the current API and is not sent.
+
+The probed channel had no playlist traffic, so the request shape is verified against the live API while the row mapping is not — an empty result here is the expected outcome for a channel whose videos are not in playlists, and raises `DATA_EMPTY`.
+
+### revenue
+
+```bash
+ytstats revenue
+```
+
+Rows are `{ date, estimatedRevenue, estimatedAdRevenue, estimatedRedPartnerRevenue, grossRevenue, cpm, playbackBasedCpm, adImpressions, monetizedPlaybacks }`.
+
+Uses the `yt-analytics-monetary.readonly` scope, already part of the default grant — nothing extra to authorize.
+
+Two things to know before reading the output:
+
+- **Google's [channel_reports page](https://developers.google.com/youtube/analytics/channel_reports) claims revenue metrics are unsupported for channel reports. That is wrong** — every metric above was accepted on 2026-07-31.
+- **Rows of zeros are the expected result on an unmonetized channel**, not a failure. A channel below the 1,000-subscriber YouTube Partner Programme threshold earns nothing, and the API says so with zeros rather than an empty result. Do not read a zero here as "the query broke".
+
+### cards
+
+```bash
+ytstats cards
+```
+
+Card and end-screen engagement by day: impressions, clicks and click rates for both cards and their teasers, plus the legacy annotation counters. Zeros mean the channel does not use cards — and because [`fetchCardMetrics` swallows its own failures](gotchas/youtube-api.md#card-metrics-fail-on-some-channels-and-are-swallowed), an empty result carries no warning. Treat empty as unknown rather than zero.
 
 ### --segment
 

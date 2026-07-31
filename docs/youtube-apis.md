@@ -115,7 +115,7 @@ Both are applied with `Math.min`, so a caller cannot exceed them.
 | Fetcher | Metrics | Dimensions | Sort | maxResults |
 |---|---|---|---|---|
 | `fetchDailyAnalytics` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `averageViewDuration`, `likes`, `dislikes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `day` | `day` | — |
-| `fetchCardMetrics` | `views`, `annotationClickThroughRate`, `cardClicks`, `cardImpressions` | `day` | `day` | — |
+| `fetchCardMetrics` | `cardImpressions`, `cardClicks`, `cardClickRate`, `cardTeaserImpressions`, `cardTeaserClicks`, `cardTeaserClickRate`, `annotationImpressions`, `annotationClickableImpressions`, `annotationClicks`, `annotationClickThroughRate`, `annotationCloseRate` | `day` | `day` | — |
 | `fetchVideoAnalytics` | `views`, `engagedViews`†, `estimatedMinutesWatched`, `averageViewDuration`, `averageViewPercentage`, `likes`, `comments`, `shares`, `subscribersGained`, `subscribersLost` | `video` | `-views` | ≤ 200 |
 | `fetchTrafficSources` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `insightTrafficSourceType` | `-views` | — |
 | `fetchDemographics` | `viewerPercentage` | `ageGroup,gender` | — | — |
@@ -126,11 +126,18 @@ Both are applied with `Math.min`, so a caller cannot exceed them.
 | `fetchPlaybackLocations` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `insightPlaybackLocationType` | `-views` | — |
 | `fetchTrafficSourceDetails` | `views` | `insightTrafficSourceDetail` | `-views` | ≤ 25 |
 | `fetchAudienceRetention` | `audienceWatchRatio`, `relativeRetentionPerformance`†, `startedWatching`†, `stoppedWatching`†, `totalSegmentImpressions`† | `elapsedVideoTimeRatio` | — | — |
+| `fetchSubGeography` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `city` \| `province` \| `dma` | `-views` | 25 |
+| `fetchOperatingSystems` | `views`, `engagedViews`†, `estimatedMinutesWatched` | `operatingSystem` | `-views` | — |
+| `fetchSharingServices` | `shares` **only** | `sharingService` | `-shares` | — |
+| `fetchPlaylists` | `views`, `estimatedMinutesWatched`, `playlistStarts`†, `viewsPerPlaylistStart`† | `playlist` | `-views` | 50 |
+| `fetchRevenue` | `estimatedRevenue`, `estimatedAdRevenue`, `estimatedRedPartnerRevenue`†, `grossRevenue`, `cpm`, `playbackBasedCpm`†, `adImpressions`, `monetizedPlaybacks` | `day` | `day` | — |
 | `runCustomReport` | caller-supplied | caller-supplied | caller-supplied | caller-supplied |
 
 † Requested in the first tier and dropped if this channel rejects it — see [Metric tiers](#metric-tiers).
 
-`fetchSearchTerms` filters with `insightTrafficSourceType==YT_SEARCH`; `fetchTrafficSourceDetails` filters on whichever source type it is given. `fetchAudienceRetention` filters `video==<videoId>`.
+`fetchSearchTerms` filters with `insightTrafficSourceType==YT_SEARCH`; `fetchTrafficSourceDetails` filters on whichever source type it is given. `fetchAudienceRetention` filters `video==<videoId>`. `fetchSubGeography` adds `country==XX` when given one — **required** for `province`, optional for `city` and `dma`.
+
+Three preconditions in that table are load-bearing rather than stylistic, and each fails opaquely without them: `province` needs the country filter, `sharingService` tolerates only `shares`, and the revenue query returns **zero rows with no error** unless `sort` is set. See [the gotcha](gotchas/youtube-api.md#three-more-dimensions-with-hard-preconditions).
 
 The `views`-only metric lists on the two detail fetchers are not an oversight: adding `estimatedMinutesWatched` to `insightTrafficSourceDetail` triggers an internal server error.
 
@@ -288,7 +295,7 @@ A naive `split(',')` would corrupt report rows silently, because video titles an
 1. **`fetchChannel`** — outside `step()`. A missing channel throws `NO_YOUTUBE_CHANNEL`; everything downstream needs `uploadsPlaylistId`.
 2. **`fetchAllVideoIds`** then **`fetchVideos`** — sequential, the second needs the first.
 3. **`fetchDailyAnalytics` + `fetchCardMetrics`** — concurrent; the results are merged by date.
-4. **Eight analytics fetchers** — concurrent: video analytics, traffic sources, demographics, device types, content types, search terms, geography, playback locations.
+4. **Thirteen analytics fetchers** — concurrent: video analytics, traffic sources, demographics, device types, content types, search terms, geography, playback locations, cities, operating systems, sharing services, playlists, revenue. `fetchAll` requests only the `city` level of sub-national geography, since `province` needs a country filter it cannot guess; `regions --level province` covers that.
 5. **Traffic source details** — one call per source type the channel actually returned, concurrent.
 6. **Retention** — sequential, one API call per video, capped at `retentionLimit` (default 50) with the newest videos first.
 7. **Reach** — only with `reach: true`.

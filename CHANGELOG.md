@@ -6,6 +6,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Six new dataset commands**, all wired into `fetch` behind per-step degradation:
+  - **`regions`** — sub-national geography at `--level city` (default), `province` or
+    `dma`. One command rather than three: the levels answer the same question at
+    different granularity and share one row shape, where `region` carries whichever
+    level was asked for and `level` echoes it back.
+  - **`operating-systems`** — views by OS.
+  - **`sharing-services`** — where viewers shared from. `shares` is the **only**
+    metric this dimension tolerates; adding `views` fails the whole query.
+  - **`playlists`** — per-playlist views and playlist starts.
+  - **`revenue`** — estimated revenue, CPM, ad impressions and monetized playbacks by
+    day, using the `yt-analytics-monetary.readonly` scope already in the default grant.
+  - **`cards`** — card and end-screen impressions, clicks and click rates, expanding
+    `fetchCardMetrics` from four counters to eleven.
+
+- Three preconditions are now enforced locally rather than surfacing as opaque
+  YouTube errors, all verified live on 2026-07-31:
+  - `regions --level province` **requires `--country`** and fails with
+    `INPUT_MISSING_REQUIRED` before any network call. YouTube only breaks provinces
+    out within a country.
+  - `sharing-services` and `playlists` refuse `--segment`.
+  - The revenue query always sets `sort`, because **the identical query returns 363
+    rows sorted and zero rows unsorted**, with no error either way — the same silent
+    zero-row refusal that hid the retention outage, in a second place.
+
+  Two caveats on verification, stated because the project's testing rule is to assert
+  captured values rather than assumed ones: `regions`, `operating-systems` and
+  `sharing-services` are pinned to real captured rows. `playlists`, `revenue` and
+  `cards` returned no rows or all-zero rows on the probed channel — which has no
+  playlists, is unmonetized, and uses no cards — so their **request shapes are verified
+  against the live API while their row mappings are not**. Rows of zeros from `revenue`
+  are the expected result below the YouTube Partner Programme threshold, not a failure.
+
+- Google's [channel_reports page](https://developers.google.com/youtube/analytics/channel_reports)
+  claims revenue metrics are unsupported for channel reports. Every one of them was
+  accepted. Recorded so the scope is not dropped on the strength of that page.
+
 ## [0.8.1] - 2026-07-31
 
 ### Fixed

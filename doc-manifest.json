@@ -38,7 +38,7 @@
         "Requirements",
         "License"
       ],
-      "line_count": 319,
+      "line_count": 325,
       "links_to": [
         "CHANGELOG.md",
         "docs/architecture.md",
@@ -180,6 +180,11 @@
         "import-legacy",
         "fetch",
         "Dataset commands",
+        "regions",
+        "sharing-services",
+        "playlists",
+        "revenue",
+        "cards",
         "--segment",
         "channel",
         "videos",
@@ -191,7 +196,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 485,
+      "line_count": 552,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -516,6 +521,7 @@
         "Per-video analytics rejects maxResults above 200",
         "Traffic source detail queries are fragile in three separate ways",
         "A segment dimension silently restricts which metrics a report may request",
+        "Three more dimensions with hard preconditions",
         "`views` changed meaning on 30 April 2025",
         "A refused metric combination can arrive as HTTP 200 with zero rows",
         "An unsupported metric fails the whole query, not just its column",
@@ -530,7 +536,7 @@
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 397,
+      "line_count": 421,
       "links_to": [
         "docs/cli.md",
         "docs/gotchas/auth.md",
@@ -674,7 +680,7 @@
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 298,
+      "line_count": 305,
       "links_to": [
         "docs/cli.md",
         "docs/gotchas/youtube-api.md"

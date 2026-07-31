@@ -234,6 +234,30 @@ has repeatedly found per-channel variation.
 pinned by tests using captured segmented payloads; the `--segment` option and the
 `search-terms` rejection in `simple()`, `src/cli.js`.
 
+## Three more dimensions with hard preconditions
+
+All three were verified on 2026-07-31 and all three fail in a way that names neither
+the cause nor the fix, so each is handled before the request goes out.
+
+| Dimension | Precondition | What happens without it |
+|---|---|---|
+| `province` | a `country==XX` filter | `The query is not supported.` |
+| `sharingService` | `shares` and no other metric | adding `views` fails the whole query |
+| revenue metrics on `day` | `sort` must be set | **zero rows, HTTP 200, no error** |
+
+The third is the [silent zero-row refusal](#a-refused-metric-combination-can-arrive-as-http-200-with-zero-rows)
+again, in a second place: `dimensions=day` with the full revenue metric set returns
+363 rows sorted and **0 rows unsorted**. It is why the earlier reading that "revenue
+is empty on this channel" was wrong — the channel is unmonetized, so the rows are
+zeros, but they do exist. Any new fetcher on a `day` dimension should set `sort`.
+
+`city` and `dma` take a country filter but do not need one; `city + country==US`
+legitimately returned zero rows on a channel whose city traffic is all non-US.
+
+**Where handled:** `fetchSubGeography()`, `fetchSharingServices()` and `fetchRevenue()`
+in `src/api/analytics.js`; the `--level province` requires `--country` check in the
+`regions` command, `src/cli.js`. Tests assert each precondition.
+
 ## `views` changed meaning on 30 April 2025
 
 YouTube redefined the metric rather than adding a new one. A Shorts view is now **every play or replay, with no minimum watch time**; it previously required a watch-time threshold. `engagedViews` was introduced to carry the old definition forward.

@@ -37,7 +37,7 @@ No install. No server. No shared API key. Your data and your credentials never l
 
 ## Overview
 
-`ytstats` reads a channel you own — metadata, videos, daily metrics, traffic sources, demographics, devices, content types, search terms, geography, playback locations, retention curves, and thumbnail CTR — and prints it as one JSON document.
+`ytstats` reads a channel you own — metadata, videos, daily metrics, traffic sources, demographics, devices, operating systems, content types, search terms, geography down to city and DMA, sharing services, playlists, revenue, card engagement, playback locations, retention curves, transcripts, and thumbnail CTR — and prints it as one JSON document.
 
 It is built for programs first. **stdout is exactly one JSON document, always** — success, failure, bad flag, unknown command, crash. Progress goes to stderr and is safe to discard. Every failure carries a stable code, a cause, `recoverable`/`retryable` flags, and runnable next steps, so an agent in a retry loop knows whether to retry, fix something, or stop.
 
@@ -141,6 +141,12 @@ ytstats devices
 ytstats content-types                 # Shorts vs long-form vs live
 ytstats search-terms                  # what people search to find you
 ytstats geography [-n 50]
+ytstats regions --level city|province|dma   # sub-national geography
+ytstats operating-systems
+ytstats sharing-services              # where viewers shared from
+ytstats playlists
+ytstats revenue                       # needs a monetized channel to be non-zero
+ytstats cards                         # card/end-screen engagement
 ytstats playback-locations
 ytstats video-analytics               # per-video, top 200 by views
 ytstats retention <videoId>           # where viewers drop off, and whether they left or skipped
@@ -216,10 +222,10 @@ Library callers get no envelope: `fetchAll` returns its result object directly a
 
 ## Drive it from an AI agent
 
-There is a published agent skill that operates **the entire CLI** — all 27 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
+There is a published agent skill that operates **the entire CLI** — all 33 commands — from plain English, so neither you nor an agentic client has to compose flags by hand:
 
 ```
-nicolasdao/ytstats@0.9.0        install with HappySkills
+nicolasdao/ytstats@0.10.0        install with HappySkills
 ```
 
 Ask for what you want and it picks the command, runs it, and answers the question:
@@ -236,7 +242,7 @@ It auto-invokes, so there is no slash command to remember. It also carries the p
 
 Two behaviours are deliberate: it confirms before `logout`, because that revokes the refresh token with Google, and it redirects a large `fetch` to a file rather than printing megabytes of JSON.
 
-Requires `ytstats` **0.8.0 or newer** — it routes to `--segment`, which earlier versions reject as an unknown option, and it reads the metric-narrowing warning that comes with it. The skill versions and publishes separately from the CLI, and its floor moves whenever a release changes behaviour its guidance depends on.
+Requires `ytstats` **0.9.0 or newer** — it routes to the six datasets added there, plus `--segment`, which earlier versions reject as unknown. The skill versions and publishes separately from the CLI, and its floor moves whenever a release changes behaviour its guidance depends on.
 
 The skill's source lives in this repo at `.agents/skills/ytstats/`, and its own `SKILL.md` and `references/` are its full documentation.
 
@@ -289,7 +295,7 @@ src/
   diagnostics.js     the failure catalog
   errors.js          YtStatsError, Google error classification, redaction
   dates.js           reporting window resolution and validation
-test/                510 tests, none requiring network access
+test/                528 tests, none requiring network access
 docs/                topic documentation, indexed below
 .agents/skills/      agent skills — ytstats drives the CLI, release-cli cuts releases
 ```
