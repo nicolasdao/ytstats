@@ -191,7 +191,7 @@ ytstats daily -d 30 --segment subscribedStatus 2>/dev/null \
 
 Segment support varies by report and by channel. `video-analytics --segment subscribedStatus` and `traffic --segment youtubeProduct` are refused on the channels tested, and a refusal arrives as `ok: false` with `API_QUERY_NOT_SUPPORTED` and exit 4 — deliberately not as an empty dataset, which would read as "no activity". It is `retryable: false`: re-running the identical command cannot help. Drop the segment, or use a command that serves it.
 
-`search-terms --segment` fails earlier still, with `INPUT_INVALID_CHOICE` and exit 3, before any network call. That dataset cannot be segmented at all.
+`search-terms`, `sharing-services`, `playlists`, `revenue` and `cards` fail earlier still, with `INPUT_INVALID_CHOICE` and exit 3, before any network call. Those datasets cannot be segmented at all — report that the flag does not apply to that command, not that the segment has no data.
 
 ## "SUBSCRIBER" traffic from an "UNSUBSCRIBED" viewer is correct
 

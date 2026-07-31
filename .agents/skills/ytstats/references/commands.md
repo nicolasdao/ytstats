@@ -157,7 +157,7 @@ Partitions an existing dataset by a second dimension rather than producing a new
 | `traffic`, `playback-locations`, `demographics` | works | usually refused |
 | `video-analytics` | usually refused | usually refused |
 
-`search-terms` rejects `--segment` with `INPUT_INVALID_CHOICE` (exit 3) before authenticating: it reads the `insightTrafficSourceDetail` dimension, which tolerates only the `views` metric and breaks when a second dimension is added. An unrecognised value fails the same way, with `.context.allowed` listing the accepted set.
+Five commands reject `--segment` with `INPUT_INVALID_CHOICE` (exit 3) before authenticating — `search-terms`, `sharing-services`, `playlists`, `revenue` and `cards`. Their dimensions cannot carry a second one: `insightTrafficSourceDetail` and `sharingService` tolerate a single metric each, and the playlist/revenue/card reports are refused alongside a segment. Support also varies **by level** on `regions`: `province` serves both segments, `city` and `dma` serve only `subscribedStatus`. An unrecognised value fails the same way, with `.context.allowed` listing the accepted set.
 
 Without the flag, rows are exactly as they were before it existed.
 
@@ -327,4 +327,8 @@ Rows are `{ date, estimatedRevenue, estimatedAdRevenue, estimatedRedPartnerReven
 
 ### cards
 
-Rows carry card and teaser impressions, clicks and click rates plus the legacy annotation counters, by day. This fetcher swallows its own failures, so an empty result carries **no warning** — treat empty as unknown, not zero.
+Rows are `{ date, cardImpressions, cardClicks, cardClickRate, cardTeaserImpressions, cardTeaserClicks, cardTeaserClickRate, annotationImpressions, annotationClickableImpressions, annotationClicks, annotationClickThroughRate, annotationCloseRate }`.
+
+This fetcher swallows its own failures, so an empty result carries **no warning** — treat empty as unknown, not zero.
+
+**These same fields are merged into `fetch`'s daily rows, but not into the standalone `daily` command.** So `.data.data.daily[0]` from `fetch` carries card counters while `daily` → `.data.rows[0]` does not. Do not conclude a field "disappeared" when comparing the two; use `cards` for card metrics by day.

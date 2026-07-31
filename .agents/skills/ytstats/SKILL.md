@@ -157,13 +157,20 @@ Three things to get right before reporting a segmented result:
 
 | Command | `subscribedStatus` | `youtubeProduct` |
 |---|---|---|
-| `daily`, `devices`, `content-types`, `geography` | works | works |
+| `daily`, `devices`, `content-types`, `geography`, `operating-systems` | works | works |
+| `regions --level province` | works | works |
+| `regions --level city`, `regions --level dma` | works | usually refused |
 | `traffic`, `playback-locations`, `demographics` | works | usually refused |
 | `video-analytics` | usually refused | usually refused |
-| `search-terms` | **rejected by the CLI** | **rejected by the CLI** |
+| `search-terms`, `sharing-services`, `playlists`, `revenue`, `cards` | **rejected by the CLI** | **rejected by the CLI** |
 
-`search-terms --segment` fails immediately with `INPUT_INVALID_CHOICE` (exit 3)
-before any network call — that dataset cannot be segmented at all. Do not retry it.
+`regions` is the only command whose segment support depends on `--level`: `province`
+serves both, `city` and `dma` serve only `subscribedStatus`.
+
+Those five bottom-row commands fail immediately with `INPUT_INVALID_CHOICE` (exit 3)
+before any network call — those datasets cannot be segmented at all. Do not retry, and
+do not present the failure as "no data for that segment"; it is a flag that does not
+apply to that command.
 
 One value that reads as a contradiction but is correct: `traffic --segment
 subscribedStatus` returns rows like `sourceType: "SUBSCRIBER"` with

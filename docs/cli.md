@@ -293,7 +293,9 @@ Two things to know before reading the output:
 ytstats cards
 ```
 
-Card and end-screen engagement by day: impressions, clicks and click rates for both cards and their teasers, plus the legacy annotation counters. Zeros mean the channel does not use cards — and because [`fetchCardMetrics` swallows its own failures](gotchas/youtube-api.md#card-metrics-fail-on-some-channels-and-are-swallowed), an empty result carries no warning. Treat empty as unknown rather than zero.
+Card and end-screen engagement by day: impressions, clicks and click rates for both cards and their teasers, plus the legacy annotation counters.
+
+The same eleven counters are **merged into `fetch`'s daily rows** (`.data.data.daily[]`), because `fetchCardMetrics` has always folded into `daily` there. The standalone `daily` command does **not** carry them — that asymmetry predates this command and is why `cards` exists as a way to get them on their own. Zeros mean the channel does not use cards — and because [`fetchCardMetrics` swallows its own failures](gotchas/youtube-api.md#card-metrics-fail-on-some-channels-and-are-swallowed), an empty result carries no warning. Treat empty as unknown rather than zero.
 
 ### --segment
 
@@ -340,15 +342,29 @@ activity". Verified against a live channel on 2026-07-30:
 | `devices` | ✅ | ✅ |
 | `content-types` | ✅ | ✅ |
 | `geography` | ✅ | ✅ |
+| `operating-systems` | ✅ | ✅ |
+| `regions --level province` | ✅ | ✅ |
+| `regions --level city` | ✅ | ❌ rejected |
+| `regions --level dma` | ✅ | ❌ rejected |
 | `traffic` | ✅ | ❌ rejected |
 | `playback-locations` | ✅ | ❌ rejected |
 | `demographics` | ✅ | ❌ rejected |
 | `video-analytics` | ❌ rejected | ❌ rejected |
 
-`search-terms` **rejects `--segment` before authenticating**, with
-`INPUT_INVALID_CHOICE` (exit 3). It reads the `insightTrafficSourceDetail`
-dimension, which tolerates only the `views` metric and fails outright when a
-second dimension is added — see [the gotcha](gotchas/youtube-api.md#traffic-source-detail-queries-are-fragile-in-three-separate-ways).
+`regions` is the one command where support varies **by level**: `province` serves both
+segments, `city` and `dma` serve only `subscribedStatus`.
+
+**Five commands reject `--segment` before authenticating**, with
+`INPUT_INVALID_CHOICE` (exit 3), because their dimension cannot carry a second one:
+
+| Command | Why |
+|---|---|
+| `search-terms` | `insightTrafficSourceDetail` tolerates only the `views` metric and fails outright on a second dimension — see [the gotcha](gotchas/youtube-api.md#traffic-source-detail-queries-are-fragile-in-three-separate-ways) |
+| `sharing-services` | `sharingService` tolerates only `shares`, for the same reason |
+| `playlists` | per-playlist rows are already keyed by playlist |
+| `revenue` | revenue metrics are refused alongside a segment |
+| `cards` | card counters are refused alongside a segment |
+
 Refusing locally turns an opaque YouTube error into one that names the flag.
 
 Without the flag, rows are exactly as they were before it existed.
