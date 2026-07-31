@@ -6,6 +6,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ytstats retention` returned an empty curve for every video on channels whose
+  drop-off metrics YouTube refuses.** `ok: true`, `curve: []`, and no warning — a
+  channel with years of retention data was indistinguishable from one with none.
+  Found by running the command against a live channel where the raw API returns 100
+  rows.
+
+  The cause is a refusal shape the tiered fallback did not recognise. `queryTiered()`
+  retried only on `API_QUERY_NOT_SUPPORTED`, but asking for `startedWatching` and
+  `stoppedWatching` alongside the other retention metrics returns **HTTP 200 with an
+  empty `rows` array** rather than an error. (Requesting either on its own returns
+  `An internal error has occurred.`, which is how the silent form was found.) The
+  richest tier therefore "succeeded" empty and the fallback never fired.
+
+  Two changes, both needed:
+  - A tier returning **zero rows is now treated as a refusal**, not an answer. The
+    descent continues, and if a thinner tier returns rows those are used with the
+    difference reported as `ANALYTICS_METRICS_UNSUPPORTED`. When every tier is empty
+    the dataset is genuinely empty, so the richest response is returned and nothing
+    is reported as dropped.
+  - **`retention` now emits `DATA_EMPTY`** on an empty curve, as every `simple()`
+    command already did. Built by hand, it had no such branch — which is exactly why
+    the outage was invisible.
+
+- Retention gained a fourth metric tier,
+  `audienceWatchRatio,relativeRetentionPerformance,totalSegmentImpressions`, for the
+  case where a channel serves the peer comparison but refuses the drop-off counts.
+  Without it such a channel fell all the way to bare `audienceWatchRatio` and lost
+  `relativeRetentionPerformance` and `totalSegmentImpressions` for no reason.
+
 ## [0.8.0] - 2026-07-30
 
 ### Added

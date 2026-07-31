@@ -334,7 +334,9 @@ Ratios above `1.0` are correct and never clamped: a Short showing `1.54` means v
 
 The last four are the ones that explain a dip. A trough with high `stoppedWatching` is content losing people; the same trough preceded by high `startedWatching` is viewers skipping an intro. Those need opposite edits, and `ratio` alone cannot distinguish them.
 
-Any of the four may be `null` if this channel cannot serve it — `relativeRetentionPerformance` needs a peer set and is the most often missing. When that happens the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly what was dropped. **A `null` here means unknown, never zero.**
+Any of the four may be `null` if this channel cannot serve it — `relativeRetentionPerformance` needs a peer set and is the most often missing, and `startedWatching`/`stoppedWatching` are refused outright by some channels. When that happens the command emits an `ANALYTICS_METRICS_UNSUPPORTED` warning naming exactly what was dropped. **A `null` here means unknown, never zero.**
+
+An empty `curve` raises a `DATA_EMPTY` warning, so "this video has no retention data" is distinguishable from a query that quietly returned nothing. Before 0.8.1 it did not, and a channel whose drop-off metrics were refused got an empty curve on **every** video with `ok: true` and no warning at all — see [the gotcha](gotchas/youtube-api.md#a-refused-metric-combination-can-arrive-as-http-200-with-zero-rows).
 
 ### transcript
 

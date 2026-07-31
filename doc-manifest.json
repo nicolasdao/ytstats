@@ -191,7 +191,7 @@
         "query",
         "Exit codes"
       ],
-      "line_count": 483,
+      "line_count": 485,
       "links_to": [
         "README.md",
         "docs/architecture.md",
@@ -517,6 +517,7 @@
         "Traffic source detail queries are fragile in three separate ways",
         "A segment dimension silently restricts which metrics a report may request",
         "`views` changed meaning on 30 April 2025",
+        "A refused metric combination can arrive as HTTP 200 with zero rows",
         "An unsupported metric fails the whole query, not just its column",
         "Retention ratios legitimately exceed 1.0",
         "Two content-type vocabularies disagree",
@@ -529,7 +530,7 @@
         "search.list costs 100x what playlistItems.list costs",
         "Card metrics fail on some channels and are swallowed"
       ],
-      "line_count": 360,
+      "line_count": 397,
       "links_to": [
         "docs/cli.md",
         "docs/gotchas/auth.md",
@@ -673,7 +674,7 @@
         "Transforms",
         "Orchestration"
       ],
-      "line_count": 293,
+      "line_count": 298,
       "links_to": [
         "docs/cli.md",
         "docs/gotchas/youtube-api.md"

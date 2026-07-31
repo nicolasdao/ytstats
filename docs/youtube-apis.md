@@ -176,15 +176,20 @@ is in [cli.md](cli.md#--segment). A rejection surfaces as `API_QUERY_NOT_SUPPORT
 
 The Analytics API rejects the **whole query** when a channel cannot serve one requested metric — it does not return a null column. Requesting a newer metric unconditionally would therefore turn a working dataset into no dataset for anyone whose channel lacks it.
 
-`queryTiered()` requests the richest metric set, and on `API_QUERY_NOT_SUPPORTED` retries with the next tier down. The last tier is the historical metric list; its failure propagates untouched. Only `API_QUERY_NOT_SUPPORTED` triggers a retry — a 403 must not be quietly downgraded into "degraded data".
+`queryTiered()` requests the richest metric set, and retries with the next tier down when a tier is refused. The last tier is the historical metric list; its failure propagates untouched. A 403 must never be quietly downgraded into "degraded data", so only a refusal triggers a retry.
 
-Retention has three tiers rather than two, so a channel with no peer-comparison data loses only `relativeRetentionPerformance` and keeps the drop-off counts:
+**A refusal has two forms, and the silent one is the dangerous one.** Usually it is `API_QUERY_NOT_SUPPORTED`. But some combinations come back as **HTTP 200 with an empty `rows` array** — a success by every mechanical signal. A tier that returns zero rows is therefore treated as refused and the descent continues; if a thinner tier returns rows, those are used and the difference is reported through `onDegraded`. When *every* tier is empty the dataset is genuinely empty: the richest response is returned and nothing is reported as dropped. See [the gotcha](gotchas/youtube-api.md#a-refused-metric-combination-can-arrive-as-http-200-with-zero-rows) for the outage that proved it necessary.
+
+Retention has four tiers, so a channel losing one capability does not forfeit the others:
 
 ```
 audienceWatchRatio,relativeRetentionPerformance,startedWatching,stoppedWatching,totalSegmentImpressions
 audienceWatchRatio,startedWatching,stoppedWatching,totalSegmentImpressions
+audienceWatchRatio,relativeRetentionPerformance,totalSegmentImpressions
 audienceWatchRatio
 ```
+
+The second tier covers a channel with no peer set; the third covers the reverse — a channel that serves `relativeRetentionPerformance` but refuses the drop-off counts, which without that tier would fall all the way to bare `audienceWatchRatio` and lose the peer comparison for no reason.
 
 Whatever was dropped is reported: `notes` in `fetchAll`, an `ANALYTICS_METRICS_UNSUPPORTED` warning on `ytstats retention`. Absent fields mean **unknown**, never zero.
 

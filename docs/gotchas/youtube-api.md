@@ -244,6 +244,43 @@ The trap is that nothing fails. A channel's `views` series has a step change in 
 
 **Where handled:** the metric tiers in `src/api/analytics.js`. `engagedViews` is deliberately **absent** from `fetchSearchTerms` and `fetchTrafficSourceDetails` — `insightTrafficSourceDetail` tolerates only `views`, per the trap above. A test asserts both the presence and that absence.
 
+## A refused metric combination can arrive as HTTP 200 with zero rows
+
+The entry below says an unsupported metric fails the whole query. That is the *loud*
+form. There is a silent one, and it defeated the fallback built for the loud one.
+
+On a live channel on 2026-07-31, `dimensions=elapsedVideoTimeRatio` with the full
+retention metric set returned **HTTP 200, complete `columnHeaders`, and `rows: []`**.
+No error, no `The query is not supported.` The same query minus `startedWatching`
+and `stoppedWatching` returned 100 rows. Asking for either of those two *on its own*
+returns `An internal error has occurred.` — which is how the silent variant was
+found at all.
+
+`queryTiered()` retried only on `API_QUERY_NOT_SUPPORTED`, so the richest tier
+"succeeded", the fallback never fired, and `ytstats retention` returned an empty
+curve with `ok: true` and no warning **for every video on the channel**. A channel
+with a decade of retention data looked like a channel with none. That is the reach-CSV
+failure shape for the third time: correct-looking response, no error, nothing to retry.
+
+Two defences, and both are needed:
+
+- **An empty tier is a degradation signal, not an answer.** `queryTiered()` keeps
+  descending when a tier returns zero rows, and if a thinner tier returns rows it uses
+  those and reports the difference through `onDegraded`. When every tier is empty the
+  dataset is genuinely empty, so it returns the richest response and reports nothing
+  dropped — a warning naming metrics that were never the problem would train callers
+  to ignore warnings.
+- **An empty curve is stated explicitly.** `retention` emits `DATA_EMPTY`, as every
+  `simple()` command already did. It was built by hand and had no such branch, which
+  is precisely why the outage was invisible.
+
+Do not "optimize" the empty-tier descent away because it costs an extra call on a
+genuinely empty dataset. That call is what distinguishes "no data" from "refused".
+
+**Where handled:** `queryTiered()` in `src/api/analytics.js`, pinned by tests using a
+captured zero-row payload; the `curve.length === 0` branch of the `retention` action
+in `src/cli.js`.
+
 ## An unsupported metric fails the whole query, not just its column
 
 The Analytics API does not return a null column for a metric a channel cannot serve — it rejects the entire request with `The query is not supported.` So adding any newer metric (`engagedViews`, `relativeRetentionPerformance`) unconditionally converts a working dataset into **no** dataset for every channel that lacks it.
